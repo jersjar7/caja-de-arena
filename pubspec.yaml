@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   mapbox_maps_flutter: ^2.9.1
   http: ^1.4.0
+  shared_preferences: ^2.5.3
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
