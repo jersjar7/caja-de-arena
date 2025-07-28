@@ -1,9 +1,16 @@
+// lib/mapbox_wfs_viewer.dart (Clean Version)
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'dart:math' as math;
+
+// Import our modular services
+import 'wfs_map_service.dart';
+import 'map_layer_styler.dart';
+import 'wfs_debug_helper.dart';
+import 'wfs_cache.dart';
+import 'feature_selection_service.dart';
+import 'feature_details_widget.dart';
 
 class MapboxWFSViewer extends StatefulWidget {
   const MapboxWFSViewer({super.key});
@@ -17,6 +24,17 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
   bool _isLoading = false;
   String _statusMessage = 'Tap a layer to load data';
 
+  // Services
+  late WFSMapService _wfsService;
+  late MapLayerStyler _layerStyler;
+  late FeatureSelectionService _featureSelection;
+
+  // Cache stats for display
+  WFSCacheStats? _cacheStats;
+
+  // Selected feature for display
+  SelectedFeature? _selectedFeature;
+
   // Layer visibility states
   final Map<String, bool> _layerVisibility = {
     'streams3': false,
@@ -25,10 +43,6 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
     'usgs_gauges': false,
     'MidpointStreams': false,
   };
-
-  // WFS base URL
-  static const String wfsBaseUrl =
-      'https://geoserver.hydroshare.org/geoserver/HS-d4238b41de7f4e59b54ef7ae875cbaa0/wfs';
 
   // Layer metadata
   final Map<String, Map<String, dynamic>> _layerInfo = {
@@ -65,27 +79,74 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    _wfsService = WFSMapService();
+    _layerStyler = MapLayerStyler();
+    _featureSelection = FeatureSelectionService();
+
+    await _wfsService.initialize();
+    await _updateCacheStats();
+
+    // Set up feature selection callbacks
+    _featureSelection.onFeatureSelected = (feature) {
+      setState(() {
+        _selectedFeature = feature;
+        _statusMessage = 'Selected: ${feature.title}';
+      });
+
+      // Show feature details
+      showFeatureDetails(
+        context,
+        feature,
+        onPropertySelected: _onPropertySelected,
+      );
+    };
+
+    _featureSelection.onEmptyTap = (point) {
+      setState(() {
+        _selectedFeature = null;
+        _statusMessage = 'Tapped empty area';
+      });
+    };
+
+    // Register layer info for feature selection
+    for (final entry in _layerInfo.entries) {
+      _featureSelection.registerLayer(entry.key, entry.value);
+    }
+
+    print('✅ All services initialized');
+  }
+
+  Future<void> _updateCacheStats() async {
+    _cacheStats = await _wfsService.getCacheStats();
+    setState(() {}); // Refresh UI
+  }
+
+  @override
+  void dispose() {
+    _wfsService.dispose();
+    _featureSelection.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
-        middle: Text('WFS Data Viewer'),
+        middle: Text('WFS Viewer (Interactive)'),
         backgroundColor: CupertinoColors.systemBackground,
       ),
       child: Column(
         children: [
-          // Status bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            color: CupertinoColors.systemGrey6,
-            child: Text(
-              _statusMessage,
-              style: const TextStyle(fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          // Status bar with cache info
+          _buildStatusBar(),
 
-          // Map
+          // Map with selected feature overlay and tap listener
           Expanded(
             flex: 3,
             child: Stack(
@@ -93,12 +154,32 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
                 MapWidget(
                   key: const ValueKey("mapWidget"),
                   onMapCreated: _onMapCreated,
+                  onTapListener: (context) {
+                    // CORRECT API: Handle taps using onTapListener
+                    _featureSelection.handleMapTap(context);
+                  },
                 ),
                 if (_isLoading)
                   Container(
                     color: Colors.black26,
                     child: const Center(
                       child: CupertinoActivityIndicator(radius: 20),
+                    ),
+                  ),
+
+                // Show selected feature info overlay
+                if (_selectedFeature != null)
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    right: 16,
+                    child: CompactFeatureInfo(
+                      feature: _selectedFeature!,
+                      onTap: () => showFeatureDetails(
+                        context,
+                        _selectedFeature!,
+                        onPropertySelected: _onPropertySelected,
+                      ),
                     ),
                   ),
               ],
@@ -119,10 +200,11 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Debug section
-                  _buildDebugSection(),
+                  // Control buttons
+                  _buildControlButtons(),
                   const SizedBox(height: 12),
 
+                  // Layer list
                   Expanded(
                     child: ListView.builder(
                       itemCount: _layerInfo.length,
@@ -173,41 +255,98 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
     );
   }
 
-  // ===========================================
-  // DEBUG METHODS - ADD THESE NEW METHODS
-  // ===========================================
+  Widget _buildStatusBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      color: CupertinoColors.systemGrey6,
+      child: Column(
+        children: [
+          Text(
+            _statusMessage,
+            style: const TextStyle(fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          if (_cacheStats != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Cache: ${_cacheStats!.totalEntries} entries, ${_cacheStats!.sizeString}, ${_cacheStats!.hitRate.toStringAsFixed(1)}% hit rate',
+              style: const TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          if (_selectedFeature == null) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'Tap on map features to view their properties',
+              style: TextStyle(
+                fontSize: 11,
+                color: CupertinoColors.tertiaryLabel,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
-  Widget _buildDebugSection() {
+  Widget _buildControlButtons() {
     return Column(
       children: [
-        const Text(
-          'Debug WFS Issues',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-
         Row(
           children: [
             Expanded(
               child: CupertinoButton.filled(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                onPressed: () async {
-                  await _runComprehensiveDebug();
-                },
-                child: const Text('Debug WFS', style: TextStyle(fontSize: 12)),
+                onPressed: _refreshCurrentViewport,
+                child: const Text(
+                  'Refresh View',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: CupertinoButton(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                onPressed: () async {
-                  await _testSimpleWFSQuery('usgs_gauges');
-                },
+                onPressed: _showCacheManager,
                 child: const Text(
-                  'Test Simple',
+                  'Cache Manager',
                   style: TextStyle(fontSize: 12),
                 ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                onPressed: _showStats,
+                child: const Text('Show Stats', style: TextStyle(fontSize: 10)),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                onPressed: _debugBbox,
+                child: const Text('Debug BBox', style: TextStyle(fontSize: 10)),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                onPressed: _addTestLayer,
+                child: const Text('Test Layer', style: TextStyle(fontSize: 10)),
               ),
             ),
           ],
@@ -216,272 +355,11 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
     );
   }
 
-  Future<void> _runComprehensiveDebug() async {
-    setState(() {
-      _statusMessage = 'Running comprehensive WFS debug...';
-    });
-
-    const testLayer = 'usgs_gauges'; // Smallest layer for testing
-
-    print('\n🔬 STARTING COMPREHENSIVE WFS DEBUG for $testLayer\n');
-
-    // Test 1: Simple query without bbox
-    print('=== TEST 1: Simple Query (No BBox) ===');
-    await _testSimpleWFSQuery(testLayer);
-
-    print('\n=== TEST 2: Different BBox Formats ===');
-    await _testBboxFormats(testLayer);
-
-    print('\n=== TEST 3: GetCapabilities ===');
-    await _testGetCapabilities();
-
-    print('\n🔬 DEBUG COMPLETE\n');
-
-    setState(() {
-      _statusMessage = 'Debug complete - check console output';
-    });
-  }
-
-  // Test simple query without bounding box
-  Future<void> _testSimpleWFSQuery(String layerId) async {
-    try {
-      final uri = Uri.parse(wfsBaseUrl).replace(
-        queryParameters: {
-          'service': 'WFS',
-          'version': '2.0.0',
-          'request': 'GetFeature',
-          'typeNames': 'HS-d4238b41de7f4e59b54ef7ae875cbaa0:$layerId',
-          'outputFormat': 'application/json',
-          'maxFeatures': '10', // Just get 10 features
-          // NO bbox parameter
-        },
-      );
-
-      print('🧪 TESTING simple query (no bbox) for $layerId:');
-      _logWFSRequest(layerId, uri);
-
-      final response = await http.get(uri);
-      print('   Response status: ${response.statusCode}');
-      _logWFSResponse(layerId, response.body);
-    } catch (e) {
-      print('❌ Simple query test failed: $e');
-    }
-  }
-
-  // Test different bbox formats
-  Future<void> _testBboxFormats(String layerId) async {
-    // For testing, use fixed Continental US bounds first
-    final mapBounds = MapBounds(
-      west: -125.0, // US West Coast
-      south: 24.0, // US South (Florida Keys)
-      east: -66.0, // US East Coast
-      north: 49.0, // US North (Canadian border)
-    );
-
-    print(
-      '🗺️  Using fixed US bounds for testing: W:${mapBounds.west}, S:${mapBounds.south}, E:${mapBounds.east}, N:${mapBounds.north}',
-    );
-
-    // Test different bbox formats
-    final bboxTests = [
-      {
-        'name': 'WGS84 format',
-        'param': 'bbox',
-        'value':
-            '${mapBounds.west},${mapBounds.south},${mapBounds.east},${mapBounds.north}',
-      },
-      {
-        'name': 'WGS84 with CRS',
-        'param': 'bbox',
-        'value':
-            '${mapBounds.west},${mapBounds.south},${mapBounds.east},${mapBounds.north},EPSG:4326',
-      },
-      {
-        'name': 'BBOX uppercase',
-        'param': 'BBOX',
-        'value':
-            '${mapBounds.west},${mapBounds.south},${mapBounds.east},${mapBounds.north}',
-      },
-      {
-        'name': 'Wide US bounds',
-        'param': 'bbox',
-        'value': '-125,24,-66,49', // Continental US
-      },
-    ];
-
-    for (int i = 0; i < bboxTests.length; i++) {
-      final test = bboxTests[i];
-      try {
-        final uri = Uri.parse(wfsBaseUrl).replace(
-          queryParameters: {
-            'service': 'WFS',
-            'version': '2.0.0',
-            'request': 'GetFeature',
-            'typeNames': 'HS-d4238b41de7f4e59b54ef7ae875cbaa0:$layerId',
-            'outputFormat': 'application/json',
-            'maxFeatures': '10',
-            test['param']!: test['value']!,
-          },
-        );
-
-        print('\n🧪 TESTING: ${test['name']}');
-        _logWFSRequest(layerId, uri);
-
-        final response = await http.get(uri);
-        print('   Response status: ${response.statusCode}');
-
-        if (response.statusCode == 200) {
-          try {
-            final data = jsonDecode(response.body);
-            final featureCount = data['features']?.length ?? 0;
-            print('   ✅ SUCCESS: $featureCount features found!');
-            if (featureCount > 0) {
-              print('   🎉 WORKING BBOX FORMAT FOUND: ${test['name']}!');
-              print(
-                '   📍 First feature coordinates: ${data['features'][0]['geometry']}',
-              );
-              return; // Stop testing, we found a working format
-            }
-          } catch (e) {
-            print('   ❌ JSON parse error: $e');
-          }
-        } else {
-          print('   ❌ HTTP error: ${response.statusCode}');
-          print(
-            '   Response: ${response.body.substring(0, math.min(200, response.body.length))}',
-          );
-        }
-      } catch (e) {
-        print('   ❌ Request failed: $e');
-      }
-    }
-  }
-
-  Future<void> _testGetCapabilities() async {
-    try {
-      final uri = Uri.parse(wfsBaseUrl).replace(
-        queryParameters: {'service': 'WFS', 'request': 'GetCapabilities'},
-      );
-
-      print('🧪 TESTING GetCapabilities:');
-      _logWFSRequest('capabilities', uri);
-
-      final response = await http.get(uri);
-      print('   Response status: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        print('   ✅ GetCapabilities successful');
-        print('   Response length: ${response.body.length}');
-
-        // Look for layer names in capabilities
-        if (response.body.contains('usgs_gauges')) {
-          print('   ✅ Found usgs_gauges in capabilities');
-        } else {
-          print('   ❌ usgs_gauges NOT found in capabilities');
-        }
-
-        // Check if we can find the available output formats
-        if (response.body.contains('application/json')) {
-          print('   ✅ JSON output format supported');
-        } else {
-          print('   ❌ JSON output format not found');
-        }
-      } else {
-        print('   ❌ GetCapabilities failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('❌ GetCapabilities test failed: $e');
-    }
-  }
-
-  void _logWFSRequest(String layerId, Uri uri) {
-    print('🔍 DEBUGGING WFS REQUEST for $layerId:');
-    print('   Full URL: $uri');
-    print('   Query Parameters:');
-    uri.queryParameters.forEach((key, value) {
-      print('     $key: $value');
-    });
-  }
-
-  void _logWFSResponse(String layerId, String responseBody) {
-    print('🔍 DEBUGGING WFS RESPONSE for $layerId:');
-    print('   Response length: ${responseBody.length} characters');
-    print('   First 500 characters:');
-    print(
-      '   ${responseBody.substring(0, math.min(500, responseBody.length))}',
-    );
-
-    // Check if it's valid JSON
-    try {
-      final data = jsonDecode(responseBody);
-      if (data is Map) {
-        print('   Response is valid JSON object');
-        print('   Keys: ${data.keys.toList()}');
-        if (data.containsKey('features')) {
-          print(
-            '   Features array length: ${data['features']?.length ?? 'null'}',
-          );
-        }
-        if (data.containsKey('totalFeatures')) {
-          print('   Total features: ${data['totalFeatures']}');
-        }
-        if (data.containsKey('numberMatched')) {
-          print('   Number matched: ${data['numberMatched']}');
-        }
-        if (data.containsKey('numberReturned')) {
-          print('   Number returned: ${data['numberReturned']}');
-        }
-      }
-    } catch (e) {
-      print('   Response is NOT valid JSON: $e');
-      // Check if it's XML (capabilities response)
-      if (responseBody.contains('<?xml')) {
-        print('   Response appears to be XML');
-      }
-    }
-  }
-
-  Future<MapBounds?> _getCurrentMapBounds() async {
-    if (mapboxMap == null) return null;
-
-    try {
-      // Method 1: Try using camera state to calculate visible bounds
-      final cameraState = await mapboxMap!.getCameraState();
-      final center = cameraState.center;
-      final zoom = cameraState.zoom;
-
-      // Calculate approximate bounds based on zoom level and screen size
-      // This is a rough approximation - you can adjust the multiplier
-      final latitudeDelta =
-          360.0 / (2 << zoom.toInt()) * 2; // Rough approximation
-      final longitudeDelta = latitudeDelta;
-
-      return MapBounds(
-        west: center.coordinates.lng - longitudeDelta / 2,
-        south: center.coordinates.lat - latitudeDelta / 2,
-        east: center.coordinates.lng + longitudeDelta / 2,
-        north: center.coordinates.lat + latitudeDelta / 2,
-      );
-    } catch (e) {
-      print('❌ Failed to get map bounds from camera state: $e');
-
-      // Method 2: Fallback to fixed Continental US bounds for testing
-      print('🔄 Using fallback Continental US bounds for testing');
-      return MapBounds(
-        west: -125.0, // US West Coast
-        south: 24.0, // US South (Florida Keys)
-        east: -66.0, // US East Coast
-        north: 49.0, // US North (Canadian border)
-      );
-    }
-  }
-
-  // ===========================================
-  // EXISTING METHODS (keeping your original code)
-  // ===========================================
-
   void _onMapCreated(MapboxMap mapboxMap) {
     this.mapboxMap = mapboxMap;
+    _wfsService.setMapboxMap(mapboxMap);
+    _layerStyler.setMapboxMap(mapboxMap);
+    _featureSelection.setMapboxMap(mapboxMap);
     _initializeMap();
   }
 
@@ -491,7 +369,7 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
     // Set initial camera to continental US
     await mapboxMap!.setCamera(
       CameraOptions(
-        center: Point(coordinates: Position(-98.5795, 39.8283)), // Center of US
+        center: Point(coordinates: Position(-98.5795, 39.8283)),
         zoom: 4.0,
       ),
     );
@@ -500,119 +378,11 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
     await mapboxMap!.loadStyleURI(MapboxStyles.MAPBOX_STREETS);
 
     setState(() {
-      _statusMessage = 'Map loaded - Try debugging WFS first';
+      _statusMessage = 'Map loaded - Ready to load layers and select features!';
     });
   }
 
-  Future<void> _testWFSConnection() async {
-    try {
-      setState(() {
-        _statusMessage = 'Testing WFS connection...';
-      });
-
-      // Use lowercase 'wfs' - HydroShare has case sensitivity bug
-      final uri = Uri.parse(wfsBaseUrl).replace(
-        queryParameters: {
-          'service': 'wfs', // lowercase required for HydroShare
-          'request': 'GetCapabilities',
-        },
-      );
-
-      print('Testing capabilities: $uri');
-
-      final response = await http.get(uri);
-      print('Capabilities response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        if (response.body.contains('WFS_Capabilities')) {
-          setState(() {
-            _statusMessage = 'WFS service is working! Try loading layers.';
-          });
-          print('SUCCESS: WFS capabilities loaded properly');
-        } else if (response.body.contains('ExceptionReport')) {
-          final errorMessage = _parseWFSException(response.body);
-          setState(() {
-            _statusMessage = 'WFS Error: $errorMessage';
-          });
-        } else {
-          setState(() {
-            _statusMessage = 'Unexpected WFS response format';
-          });
-        }
-      } else {
-        setState(() {
-          _statusMessage = 'WFS service returned HTTP ${response.statusCode}';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'WFS test error: $e';
-      });
-    }
-  }
-
-  Future<void> _testAlternativeWFS() async {
-    try {
-      setState(() {
-        _statusMessage = 'Testing demo WFS service...';
-      });
-
-      // Test with a known working WFS service (USGS Water Data)
-      const demoWfsUrl =
-          'https://waterservices.usgs.gov/nwis/site?format=mapper&seriesCatalogOutput=true&outputDataTypeCd=dv&parameterCd=00060&stateCd=co';
-
-      print('Testing demo service: $demoWfsUrl');
-
-      final response = await http.get(Uri.parse(demoWfsUrl));
-      print('Demo response: ${response.statusCode}');
-      print('Demo response preview: ${response.body.substring(0, 200)}...');
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _statusMessage =
-              'Demo service works! HydroShare WFS may have issues.';
-        });
-      } else {
-        setState(() {
-          _statusMessage =
-              'Demo service also failed - check internet connection';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'Demo test error: $e';
-      });
-    }
-  }
-
-  String _parseWFSException(String xmlResponse) {
-    try {
-      // Extract exception text from XML (simple string parsing)
-      final exceptionStart = xmlResponse.indexOf('<ows:ExceptionText>');
-      final exceptionEnd = xmlResponse.indexOf('</ows:ExceptionText>');
-
-      if (exceptionStart != -1 && exceptionEnd != -1) {
-        return xmlResponse.substring(exceptionStart + 19, exceptionEnd);
-      }
-
-      // Try alternative format
-      final codeStart = xmlResponse.indexOf('exceptionCode="');
-      if (codeStart != -1) {
-        final codeEnd = xmlResponse.indexOf('"', codeStart + 15);
-        if (codeEnd != -1) {
-          return xmlResponse.substring(codeStart + 15, codeEnd);
-        }
-      }
-
-      return 'Unknown WFS exception';
-    } catch (e) {
-      return 'Could not parse exception: $e';
-    }
-  }
-
   Future<void> _toggleLayer(String layerId, bool visible) async {
-    if (mapboxMap == null) return;
-
     setState(() {
       _layerVisibility[layerId] = visible;
     });
@@ -625,90 +395,30 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
   }
 
   Future<void> _loadLayer(String layerId) async {
-    if (mapboxMap == null) return;
-
     setState(() {
       _isLoading = true;
       _statusMessage = 'Loading ${_layerInfo[layerId]!['name']}...';
     });
 
     try {
-      // Try different output formats for better compatibility
-      final outputFormats = [
-        'application/json',
-        'json',
-        // Removed 'application/geo+json' as it returns 400 error
-      ];
+      final result = await _wfsService.loadLayer(layerId, _layerInfo[layerId]!);
 
-      for (final format in outputFormats) {
-        // Use lowercase 'wfs' and 'typeNames' (WFS 2.0) - HydroShare quirks
-        final uri = Uri.parse(wfsBaseUrl).replace(
-          queryParameters: {
-            'service': 'wfs', // lowercase required for HydroShare
-            'version': '2.0.0',
-            'request': 'GetFeature',
-            'typeNames':
-                'HS-d4238b41de7f4e59b54ef7ae875cbaa0:$layerId', // typeNames not typeName for WFS 2.0
-            'outputFormat': format,
-            'maxFeatures': '1000',
-          },
-        );
-
-        print('Trying: $uri');
-
-        final response = await http.get(
-          uri,
-          headers: {
-            'Accept': 'application/json, application/geo+json, */*',
-            'User-Agent': 'Flutter-WFS-Client/1.0',
-          },
-        );
-
-        print('Response status: ${response.statusCode}');
-        print('Response headers: ${response.headers}');
-        print('Response body preview: ${response.body.substring(0, 200)}...');
-
-        if (response.statusCode == 200) {
-          // Check if response is JSON
-          if (response.body.trim().startsWith('{')) {
-            try {
-              final data = jsonDecode(response.body);
-              final featureCount = data['features']?.length ?? 0;
-
-              print('Successfully parsed JSON with $featureCount features');
-
-              await _addDataToMap(layerId, response.body, featureCount);
-              return; // Success! Exit the function
-            } catch (e) {
-              print('JSON parsing failed: $e');
-              continue; // Try next format
-            }
-          } else if (response.body.contains('ExceptionReport')) {
-            // Parse the WFS exception for this specific request
-            final errorMessage = _parseWFSException(response.body);
-            print('WFS Exception for $layerId with $format: $errorMessage');
-            print('Full exception response: ${response.body}');
-            continue; // Try next format
-          } else {
-            print('Response is not JSON or exception, trying next format...');
-            continue;
-          }
-        } else {
-          print('HTTP error ${response.statusCode}: ${response.body}');
-          continue;
-        }
+      if (result != null) {
+        await _updateCacheStats();
+        setState(() {
+          _statusMessage =
+              'Loaded ${_layerInfo[layerId]!['name']} '
+              '(${result.featureCount} features, ${result.fromCache ? 'cached' : 'fresh'})';
+        });
+      } else {
+        throw Exception('Failed to load layer');
       }
-
-      // If we get here, all formats failed
-      throw Exception(
-        'All output formats failed. Service may be down or require authentication.',
-      );
     } catch (e) {
-      print('Error loading layer $layerId: $e');
+      print('❌ Layer loading failed: $e');
       setState(() {
         _layerVisibility[layerId] = false;
         _statusMessage =
-            'Error loading ${_layerInfo[layerId]!['name']}: ${e.toString()}';
+            'Failed to load ${_layerInfo[layerId]!['name']}: ${e.toString()}';
       });
     } finally {
       setState(() {
@@ -717,182 +427,153 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
     }
   }
 
-  Future<void> _addDataToMap(
-    String layerId,
-    String geojsonData,
-    int featureCount,
-  ) async {
-    try {
-      // Remove existing source and layers if they exist
-      await _removeLayer(layerId);
+  /// Handle when a user selects a property from feature details
+  void _onPropertySelected(String propertyKey, dynamic propertyValue) {
+    print('🎯 Property selected: $propertyKey = $propertyValue');
 
-      print('🗺️  Adding $featureCount features to map for layer: $layerId');
-
-      // Add source
-      if (_layerInfo[layerId]!['type'] == 'point') {
-        // For point data, enable clustering
-        await mapboxMap!.style.addSource(
-          GeoJsonSource(
-            id: "${layerId}_source",
-            data: geojsonData,
-            cluster: true,
-            clusterMaxZoom: 14,
-            clusterRadius: 50,
+    // Show confirmation dialog
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text('Use Property: $propertyKey'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Value: $propertyValue'),
+            const SizedBox(height: 16),
+            const Text('This value is now available in your app!'),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Copy Value'),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: propertyValue.toString()));
+              Navigator.pop(context);
+              setState(() {
+                _statusMessage = 'Copied "$propertyKey" value to clipboard';
+              });
+            },
           ),
-        );
-      } else {
-        // For line data, no clustering
-        await mapboxMap!.style.addSource(
-          GeoJsonSource(id: "${layerId}_source", data: geojsonData),
-        );
-      }
-
-      // Add layer with appropriate styling
-      await _addStyledLayer(layerId);
-
-      setState(() {
-        _statusMessage =
-            'Loaded ${_layerInfo[layerId]!['name']} ($featureCount features)';
-      });
-    } catch (e) {
-      print('Error adding data to map: $e');
-      throw Exception('Failed to add data to map: $e');
-    }
-  }
-
-  Future<void> _addStyledLayer(String layerId) async {
-    final layerData = _layerInfo[layerId]!;
-    final colorInt = layerData['color'] as int;
-
-    // Convert integer color to hex string format that Mapbox expects
-    final colorHex =
-        '#${colorInt.toRadixString(16).padLeft(8, '0').substring(2)}';
-
-    print(
-      '🎨 Adding styled layer for $layerId with color: $colorHex (from int: $colorInt)',
+          CupertinoDialogAction(
+            child: const Text('OK'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
     );
 
-    if (layerData['type'] == 'point') {
-      // Add clustering layers for points
-
-      // 1. Cluster circles
-      await mapboxMap!.style.addLayer(
-        CircleLayer(
-          id: "${layerId}_clusters",
-          sourceId: "${layerId}_source",
-          circleRadius: 18.0,
-          circleColor: colorInt, // Use int color
-          filter: ["has", "point_count"],
-        ),
-      );
-
-      // 2. Cluster count text
-      await mapboxMap!.style.addLayer(
-        SymbolLayer(
-          id: "${layerId}_count",
-          sourceId: "${layerId}_source",
-          textFieldExpression: ["get", "point_count_abbreviated"],
-          textSize: 12.0,
-          textColor: 0xFFFFFFFF, // Use int color
-          filter: ["has", "point_count"],
-        ),
-      );
-
-      // 3. Unclustered points
-      await mapboxMap!.style.addLayer(
-        CircleLayer(
-          id: "${layerId}_unclustered",
-          sourceId: "${layerId}_source",
-          circleRadius: 6.0,
-          circleColor: colorInt, // Use int color
-          circleStrokeColor: 0xFFFFFFFF, // Use int color
-          circleStrokeWidth: 1.0,
-          filter: [
-            "!",
-            ["has", "point_count"],
-          ],
-        ),
-      );
-    } else {
-      // Add line layer for streams
-      await mapboxMap!.style.addLayer(
-        LineLayer(
-          id: "${layerId}_lines",
-          sourceId: "${layerId}_source",
-          lineColor: colorInt, // Use int color
-          lineWidthExpression: [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            5,
-            1.0,
-            10,
-            2.0,
-            15,
-            3.0,
-          ],
-          lineOpacity: 0.8,
-        ),
-      );
-    }
+    // You can also store the value for use in your app
+    // For example, save to a variable, send to a service, etc.
+    setState(() {
+      _statusMessage = 'Using property: $propertyKey = $propertyValue';
+    });
   }
 
   Future<void> _removeLayer(String layerId) async {
-    if (mapboxMap == null) return;
+    await _wfsService.removeLayer(layerId);
+    setState(() {
+      _statusMessage = 'Removed ${_layerInfo[layerId]!['name']}';
+    });
+  }
 
-    try {
-      // Remove all possible layer variations
-      final layersToRemove = [
-        "${layerId}_clusters",
-        "${layerId}_count",
-        "${layerId}_unclustered",
-        "${layerId}_lines",
-      ];
+  Future<void> _refreshCurrentViewport() async {
+    setState(() {
+      _statusMessage = 'Refreshing visible layers...';
+    });
 
-      for (final layerName in layersToRemove) {
-        try {
-          await mapboxMap!.style.removeStyleLayer(layerName);
-          print('🗑️  Removed layer: $layerName');
-        } catch (e) {
-          // Layer might not exist, continue silently
-          print('ℹ️  Layer $layerName does not exist (this is normal)');
-        }
-      }
+    final visibleLayers = _layerVisibility.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
 
-      // Remove source
-      try {
-        await mapboxMap!.style.removeStyleSource("${layerId}_source");
-        print('🗑️  Removed source: ${layerId}_source');
-      } catch (e) {
-        // Source might not exist, continue silently
-        print('ℹ️  Source ${layerId}_source does not exist (this is normal)');
-      }
+    final results = await _wfsService.refreshViewport(
+      visibleLayers,
+      _layerInfo,
+    );
 
-      // Only update status if this was called from toggle (not from cleanup)
-      if (_layerVisibility[layerId] == false) {
-        setState(() {
-          _statusMessage = 'Removed ${_layerInfo[layerId]!['name']}';
-        });
-      }
-    } catch (e) {
-      print('Error removing layer $layerId: $e');
+    await _updateCacheStats();
+    setState(() {
+      _statusMessage =
+          'Refreshed ${results.length} layers for current viewport';
+    });
+  }
+
+  Future<void> _showCacheManager() async {
+    await showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Cache Manager'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_cacheStats != null) ...[
+              Text('Total entries: ${_cacheStats!.totalEntries}'),
+              Text('Cache size: ${_cacheStats!.sizeString}'),
+              Text('Hit rate: ${_cacheStats!.hitRate.toStringAsFixed(1)}%'),
+              const SizedBox(height: 16),
+            ],
+            const Text('Choose an action:'),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Clear Expired'),
+            onPressed: () async {
+              final removed = await _wfsService.clearExpiredCache();
+              await _updateCacheStats();
+              Navigator.pop(context);
+              setState(() {
+                _statusMessage = 'Removed $removed expired cache entries';
+              });
+            },
+          ),
+          CupertinoDialogAction(
+            child: const Text('Clear All'),
+            onPressed: () async {
+              await _wfsService.clearCache();
+              await _updateCacheStats();
+              Navigator.pop(context);
+              setState(() {
+                _statusMessage = 'Cache cleared completely';
+              });
+            },
+          ),
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStats() {
+    _wfsService.printStats();
+    setState(() {
+      _statusMessage = 'Statistics printed to console';
+    });
+  }
+
+  Future<void> _debugBbox() async {
+    if (mapboxMap != null) {
+      await WFSDebugHelper.debugBboxCalculation(mapboxMap!);
+      setState(() {
+        _statusMessage = 'BBox debug completed - check console';
+      });
     }
   }
-}
 
-// Helper class for map bounds
-class MapBounds {
-  final double west, south, east, north;
-
-  MapBounds({
-    required this.west,
-    required this.south,
-    required this.east,
-    required this.north,
-  });
-
-  @override
-  String toString() {
-    return 'MapBounds(W:$west, S:$south, E:$east, N:$north)';
+  Future<void> _addTestLayer() async {
+    try {
+      await _layerStyler.addTestLayer();
+      setState(() {
+        _statusMessage = 'Test layer added - large red circle at center of US';
+      });
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'Test layer failed: $e';
+      });
+    }
   }
 }

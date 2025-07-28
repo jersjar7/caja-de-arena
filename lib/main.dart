@@ -10,7 +10,8 @@ void main() {
   MapboxOptions.setAccessToken(
     const String.fromEnvironment(
       'ACCESS_TOKEN',
-      defaultValue: 'YOUR_MAPBOX_ACCESS_TOKEN_HERE', // Replace with your token
+      defaultValue:
+          'pk.eyJ1IjoiamVyc29uZGV2cyIsImEiOiJjbTkxcGQ1emYwM2d1MnFwcWJ2dmgwYmpuIn0.ca52KhzP9gaK5nYDMv0ZxA', // Replace with your token
     ),
   );
 
