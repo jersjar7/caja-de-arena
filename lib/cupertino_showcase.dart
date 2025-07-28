@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'mapbox_wfs_viewer.dart';
+import 'wfs_approach/mapbox_wfs_viewer.dart';
 
 class CupertinoShowcase extends StatefulWidget {
   const CupertinoShowcase({super.key});
