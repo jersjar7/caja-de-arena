@@ -1,6 +1,7 @@
-// lib/feature_selection_service.dart (CORRECTED VERSION)
+// lib/feature_selection_service.dart (UPDATED VERSION - Closest Feature Only)
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 
 /// Represents a selected map feature with its properties
 class SelectedFeature {
@@ -116,7 +117,6 @@ class FeatureSelectionService {
   /// Set the MapboxMap instance and setup tap listener
   void setMapboxMap(MapboxMap map) {
     mapboxMap = map;
-    // Note: We will handle taps via MapWidget.onTapListener instead of here
     print('✅ Feature selection service ready');
   }
 
@@ -141,7 +141,7 @@ class FeatureSelectionService {
       final features = await _queryFeaturesAtPoint(tapPoint, touchPosition);
 
       if (features.isNotEmpty) {
-        final feature = features.first;
+        final feature = features.first; // Will be the closest feature
         print('✅ Feature selected: ${feature.title}');
 
         _selectedFeature = feature;
@@ -155,7 +155,7 @@ class FeatureSelectionService {
     }
   }
 
-  /// Query features at a specific point using the correct API
+  /// Query features at a specific point and return only the closest one
   Future<List<SelectedFeature>> _queryFeaturesAtPoint(
     Point tapPoint,
     ScreenCoordinate touchPosition,
@@ -164,14 +164,14 @@ class FeatureSelectionService {
 
     final selectedFeatures = <SelectedFeature>[];
 
-    // Create a small rectangular area around the tap point for querying
+    // Create a smaller rectangular area around the tap point for querying
     final queryBox = RenderedQueryGeometry.fromScreenBox(
       ScreenBox(
         min: ScreenCoordinate(
-          x: touchPosition.x - 10, // 10 pixel radius
-          y: touchPosition.y - 10,
+          x: touchPosition.x - 5, // Reduced from 10 to 5 pixel radius
+          y: touchPosition.y - 5,
         ),
-        max: ScreenCoordinate(x: touchPosition.x + 10, y: touchPosition.y + 10),
+        max: ScreenCoordinate(x: touchPosition.x + 5, y: touchPosition.y + 5),
       ),
     );
 
@@ -223,8 +223,137 @@ class FeatureSelectionService {
       }
     }
 
-    print('📊 Found ${selectedFeatures.length} selectable features');
-    return selectedFeatures;
+    print('📊 Found ${selectedFeatures.length} total features');
+
+    // NEW: Find only the closest feature
+    if (selectedFeatures.isNotEmpty) {
+      final closestFeature = _findClosestFeature(selectedFeatures, tapPoint);
+      if (closestFeature != null) {
+        print('🎯 Selected closest feature: ${closestFeature.title}');
+        return [closestFeature];
+      }
+    }
+
+    return [];
+  }
+
+  /// NEW: Find the closest feature to the tap location
+  SelectedFeature? _findClosestFeature(
+    List<SelectedFeature> features,
+    Point tapLocation,
+  ) {
+    if (features.isEmpty) return null;
+
+    SelectedFeature? closest;
+    double minDistance = double.infinity;
+
+    for (final feature in features) {
+      try {
+        final geometry = feature.geometry;
+        final coordinates = geometry['coordinates'];
+
+        double distance;
+        if (geometry['type'] == 'Point') {
+          final coords = coordinates as List;
+          final featureLng = (coords[0] as num).toDouble();
+          final featureLat = (coords[1] as num).toDouble();
+          distance = _calculateDistance(
+            tapLocation.coordinates.lat.toDouble(),
+            tapLocation.coordinates.lng.toDouble(),
+            featureLat,
+            featureLng,
+          );
+        } else if (geometry['type'] == 'LineString') {
+          // For lines, find closest point on the line
+          distance = _distanceToLineString(tapLocation, coordinates as List);
+        } else {
+          continue; // Skip other geometry types
+        }
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closest = feature;
+        }
+      } catch (e) {
+        print('⚠️ Error calculating distance for feature: $e');
+        continue;
+      }
+    }
+
+    print('📏 Closest feature distance: ${minDistance.toStringAsFixed(2)}m');
+    return closest;
+  }
+
+  /// NEW: Calculate distance between two points using Haversine formula
+  double _calculateDistance(
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) {
+    const double earthRadius = 6371000; // meters
+    final dLat = (lat2 - lat1) * (math.pi / 180);
+    final dLng = (lng2 - lng1) * (math.pi / 180);
+
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * (math.pi / 180)) *
+            math.cos(lat2 * (math.pi / 180)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  /// NEW: Calculate distance to a line string
+  double _distanceToLineString(Point tapLocation, List coordinates) {
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < coordinates.length - 1; i++) {
+      final p1 = coordinates[i] as List;
+      final p2 = coordinates[i + 1] as List;
+
+      final distance = _distanceToLineSegment(
+        tapLocation.coordinates.lat.toDouble(),
+        tapLocation.coordinates.lng.toDouble(),
+        (p1[1] as num).toDouble(),
+        (p1[0] as num).toDouble(),
+        (p2[1] as num).toDouble(),
+        (p2[0] as num).toDouble(),
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    return minDistance;
+  }
+
+  /// NEW: Calculate distance from point to line segment
+  double _distanceToLineSegment(
+    double px,
+    double py,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+  ) {
+    final dx = x2 - x1;
+    final dy = y2 - y1;
+
+    if (dx != 0 || dy != 0) {
+      final t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+
+      if (t > 1) {
+        return _calculateDistance(px, py, x2, y2);
+      } else if (t > 0) {
+        return _calculateDistance(px, py, x1 + dx * t, y1 + dy * t);
+      }
+    }
+
+    return _calculateDistance(px, py, x1, y1);
   }
 
   /// Process a queried feature into a SelectedFeature
@@ -239,14 +368,21 @@ class FeatureSelectionService {
       final feature = queriedRenderedFeature.queriedFeature.feature;
       final featureJson = jsonEncode(feature);
 
-      print('🔍 Processing feature: ${featureJson.substring(0, 200)}...');
+      print(
+        '🔍 Processing feature: ${featureJson.substring(0, math.min(200, featureJson.length))}...',
+      );
 
       // Parse the feature JSON
       final featureData = feature;
 
-      final properties =
-          featureData['properties'] as Map<String, dynamic>? ?? {};
-      final geometry = featureData['geometry'] as Map<String, dynamic>? ?? {};
+      // FIXED: Safe type casting to prevent the _Map<Object?, Object?> error
+      final properties = featureData['properties'] != null
+          ? Map<String, dynamic>.from(featureData['properties'] as Map)
+          : <String, dynamic>{};
+      final geometry = featureData['geometry'] != null
+          ? Map<String, dynamic>.from(featureData['geometry'] as Map)
+          : <String, dynamic>{};
+
       final featureId =
           featureData['id']?.toString() ??
           properties['id']?.toString() ??

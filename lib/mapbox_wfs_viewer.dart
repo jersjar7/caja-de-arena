@@ -213,9 +213,17 @@ class _MapboxWFSViewerState extends State<MapboxWFSViewer> {
                         final layerData = _layerInfo[layerId]!;
                         final isVisible = _layerVisibility[layerId] ?? false;
 
-                        return Card(
+                        return Container(
                           margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemBackground,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: CupertinoColors.separator,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: CupertinoListTile(
                             leading: Container(
                               width: 20,
                               height: 20,
