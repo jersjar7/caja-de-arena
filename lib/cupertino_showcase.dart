@@ -1,4 +1,5 @@
 // lib/cupertino_showcase.dart (UPDATED with both approaches)
+import 'package:cupertino_showcase/pages/streams2_map_page.dart';
 import 'package:flutter/cupertino.dart';
 import 'wfs_approach/mapbox_wfs_viewer.dart';
 import 'vector_tiles_approach/mapbox_vector_viewer.dart';
@@ -232,6 +233,59 @@ class _CupertinoShowcaseState extends State<CupertinoShowcase> {
             const SizedBox(height: 8),
             CupertinoListSection.insetGrouped(
               children: [
+                // NEW: Clean streams2 Explorer (the new page!)
+                CupertinoListTile(
+                  title: const Text('streams2 Explorer'),
+                  subtitle: const Text(
+                    'Clean map with 364K streams + place search',
+                  ),
+                  leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemTeal,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.map,
+                      color: CupertinoColors.white,
+                      size: 20,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemTeal.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'FEATURED',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoColors.systemTeal,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const CupertinoListTileChevron(),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (BuildContext context) {
+                          return const Streams2MapPage();
+                        },
+                      ),
+                    );
+                  },
+                ),
                 // WFS Approach
                 CupertinoListTile(
                   title: const Text('WFS Data Viewer'),

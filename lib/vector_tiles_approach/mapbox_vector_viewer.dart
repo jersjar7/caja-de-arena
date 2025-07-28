@@ -1,4 +1,7 @@
 // lib/vector_tiles_approach/mapbox_vector_viewer.dart
+import 'dart:async';
+
+import 'package:cupertino_showcase/components/mapbox_place_search.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +24,7 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
   MapboxMap? mapboxMap;
   bool _isLoading = false;
   String _statusMessage = 'Ready to load streams2 vector tiles';
+  SearchedPlace? _selectedPlace;
 
   // Services
   late VectorTilesService _vectorService;
@@ -130,6 +134,7 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
                     _featureSelection.handleMapTap(context);
                   },
                 ),
+
                 if (_isLoading)
                   Container(
                     color: Colors.black26,
@@ -186,10 +191,22 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
                   ),
                 ),
 
+                // 🔍 NEW: Search Bar Overlay
+                Positioned(
+                  top: 60,
+                  left: 16,
+                  right: 16,
+                  child: CompactMapSearchBar(
+                    mapboxMap: mapboxMap,
+                    onPlaceSelected: _onPlaceSelectedFromSearch,
+                    onTap: _showFullSearch,
+                  ),
+                ),
+
                 // Show selected feature info overlay
                 if (_selectedFeature != null)
                   Positioned(
-                    top: 60,
+                    top: 120, // Moved down to accommodate search bar
                     left: 16,
                     right: 16,
                     child: CompactVectorFeatureInfo(
@@ -200,6 +217,15 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
                         onPropertySelected: _onPropertySelected,
                       ),
                     ),
+                  ),
+
+                // Show selected place overlay
+                if (_selectedPlace != null)
+                  Positioned(
+                    bottom: 20,
+                    left: 16,
+                    right: 16,
+                    child: _buildSelectedPlaceInfo(_selectedPlace!),
                   ),
               ],
             ),
@@ -348,6 +374,168 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Handle place selection from search
+  void _onPlaceSelectedFromSearch(SearchedPlace place) {
+    setState(() {
+      _selectedPlace = place;
+      _statusMessage = 'Navigated to: ${place.shortName}';
+    });
+
+    print('🎯 User searched and selected: ${place.placeName}');
+
+    // Optionally hide the selected place info after a few seconds
+    Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() {
+          _selectedPlace = null;
+        });
+      }
+    });
+  }
+
+  /// Show full search modal
+  void _showFullSearch() {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: CupertinoColors.systemBackground,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGrey3,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Text(
+                    'Search Places',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ),
+
+            // Search widget
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: MapboxPlaceSearchWidget(
+                  mapboxMap: mapboxMap,
+                  onPlaceSelected: (place) {
+                    _onPlaceSelectedFromSearch(place);
+                    Navigator.pop(context);
+                  },
+                  placeholder: 'Search cities, landmarks, addresses...',
+                  showRecentSearches: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build selected place info widget
+  Widget _buildSelectedPlaceInfo(SearchedPlace place) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemGreen.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.systemGrey.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemGreen,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              place.categoryIcon,
+              color: CupertinoColors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  place.shortName,
+                  style: const TextStyle(
+                    color: CupertinoColors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (place.contextString.isNotEmpty)
+                  Text(
+                    place.contextString,
+                    style: const TextStyle(
+                      color: CupertinoColors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              setState(() {
+                _selectedPlace = null;
+              });
+            },
+            child: const Icon(
+              CupertinoIcons.xmark_circle_fill,
+              color: CupertinoColors.white,
+              size: 20,
             ),
           ),
         ],
