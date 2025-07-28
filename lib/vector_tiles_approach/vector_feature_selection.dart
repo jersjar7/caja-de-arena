@@ -24,9 +24,10 @@ class SelectedVectorFeature {
 
   /// Get a human-readable title for the feature (optimized for streams2)
   String get title {
-    // For streams2, create meaningful titles
-    final stationId = properties['station_id'];
-    final streamOrder = properties['streamOrde'];
+    // ✅ Use correct field names from Mapbox Studio
+    final stationId = properties['station_id'] ?? properties['STATIONID'];
+    final streamOrder =
+        properties['streamOrde']; // ✅ Note: it's "streamOrde" not "streamOrder"
 
     if (stationId != null && streamOrder != null) {
       return 'Stream ${_formatStationId(stationId)} (Order $streamOrder)';
@@ -42,7 +43,7 @@ class SelectedVectorFeature {
 
   /// Get feature type description (optimized for streams2)
   String get typeDescription {
-    final streamOrder = properties['streamOrde'];
+    final streamOrder = properties['streamOrde']; // ✅ Correct field name
 
     if (streamOrder != null) {
       return _getStreamOrderDescription(streamOrder);
@@ -238,20 +239,23 @@ class VectorFeatureSelectionService {
     // Create a query area around the tap point (larger for line features)
     final queryBox = RenderedQueryGeometry.fromScreenBox(
       ScreenBox(
-        min: ScreenCoordinate(x: touchPosition.x - 8, y: touchPosition.y - 8),
-        max: ScreenCoordinate(x: touchPosition.x + 8, y: touchPosition.y + 8),
+        min: ScreenCoordinate(
+          x: touchPosition.x - 12,
+          y: touchPosition.y - 12,
+        ), // Larger area
+        max: ScreenCoordinate(x: touchPosition.x + 12, y: touchPosition.y + 12),
       ),
     );
 
-    // Query streams2 layers specifically
+    // ✅ Query the CORRECT streams2 layer names
     final streams2LayerIds = [
-      'streams2-order-1-2',
-      'streams2-order-3-4',
-      'streams2-order-5-plus',
+      'streams2-debug-correct', // Our main debug layer
+      'streams2-order-1-2', // Small streams
+      'streams2-order-3-4', // Medium streams
+      'streams2-order-5-plus', // Large rivers
     ];
 
     try {
-      // Query streams2 vector layers
       final List<QueriedRenderedFeature?> queryResult = await mapboxMap!
           .queryRenderedFeatures(
             queryBox,
@@ -270,6 +274,7 @@ class VectorFeatureSelectionService {
             );
             if (selectedFeature != null) {
               selectedFeatures.add(selectedFeature);
+              break; // Just take the first one for now
             }
           } catch (e) {
             print('⚠️ Error processing streams2 feature: $e');
@@ -278,16 +283,11 @@ class VectorFeatureSelectionService {
       }
 
       print('📊 Processed ${selectedFeatures.length} valid streams2 features');
-
-      // Return the first feature (streams are already ordered by importance)
-      if (selectedFeatures.isNotEmpty) {
-        return [selectedFeatures.first];
-      }
+      return selectedFeatures;
     } catch (e) {
       print('⚠️ Error querying streams2 features: $e');
+      return [];
     }
-
-    return [];
   }
 
   /// Process a queried vector tile feature
@@ -296,15 +296,11 @@ class VectorFeatureSelectionService {
     Point tapLocation,
   ) {
     try {
-      // Get feature data from the query result
       final feature = queriedRenderedFeature.queriedFeature.feature;
-
-      // FIXED: More defensive null handling for layers
       final layerIds = queriedRenderedFeature.layers;
-      String layerId = 'unknown-layer';
+      String layerId = 'streams2-layer';
 
       if (layerIds.isNotEmpty) {
-        // Find first non-null layer ID
         for (final id in layerIds) {
           if (id != null && id.isNotEmpty) {
             layerId = id;
@@ -313,18 +309,13 @@ class VectorFeatureSelectionService {
         }
       }
 
-      // FIXED: More defensive null handling for source
       String sourceId = 'streams2-source';
       final source = queriedRenderedFeature.queriedFeature.source;
       if (source.isNotEmpty) {
         sourceId = source;
       }
 
-      print(
-        '🔍 Processing streams2 feature from layers: $layerIds, source: $sourceId',
-      );
-
-      // Safe type casting for vector tile properties
+      // ✅ Use correct field names from Mapbox Studio
       final properties = feature['properties'] != null
           ? Map<String, dynamic>.from(feature['properties'] as Map)
           : <String, dynamic>{};
@@ -332,31 +323,37 @@ class VectorFeatureSelectionService {
           ? Map<String, dynamic>.from(feature['geometry'] as Map)
           : <String, dynamic>{};
 
-      // For streams2, the source layer is always 'streams2'
-      final sourceLayer = 'streams2';
+      // ✅ The source layer name is "streams2-7jgd8p"
+      final sourceLayer = 'streams2-7jgd8p';
 
       final featureId =
           feature['id']?.toString() ??
           properties['station_id']?.toString() ??
+          properties['STATIONID']?.toString() ??
           'streams2_${DateTime.now().millisecondsSinceEpoch}';
 
-      // Log the properties for debugging
+      // ✅ Log the correct field names
       print('🔍 streams2 properties: ${properties.keys.toList()}');
       if (properties.containsKey('station_id')) {
         print('   station_id: ${properties['station_id']}');
       }
+      if (properties.containsKey('STATIONID')) {
+        print('   STATIONID: ${properties['STATIONID']}');
+      }
       if (properties.containsKey('streamOrde')) {
-        print('   streamOrde: ${properties['streamOrde']}');
+        print(
+          '   streamOrde: ${properties['streamOrde']}',
+        ); // Note: it's "streamOrde" not "streamOrder"
       }
 
       return SelectedVectorFeature(
-        layerId: layerId, // Now guaranteed to be non-null String
+        layerId: layerId,
         sourceLayer: sourceLayer,
         featureId: featureId,
         properties: properties,
         geometry: geometry,
         tapLocation: tapLocation,
-        sourceId: sourceId, // Now guaranteed to be non-null String
+        sourceId: sourceId,
       );
     } catch (e) {
       print('❌ Error processing streams2 vector feature: $e');

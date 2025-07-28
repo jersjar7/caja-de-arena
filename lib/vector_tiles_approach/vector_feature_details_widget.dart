@@ -68,8 +68,11 @@ class _VectorFeatureDetailsWidgetState
   }
 
   Widget _buildHeader() {
-    final streamOrder = widget.feature.properties['streamOrde'];
-    final stationId = widget.feature.properties['station_id'];
+    final streamOrder =
+        widget.feature.properties['streamOrde']; // ✅ Correct field name
+    final stationId =
+        widget.feature.properties['station_id'] ??
+        widget.feature.properties['STATIONID']; // ✅ Check both field names
 
     return Padding(
       padding: const EdgeInsets.all(16),

@@ -69,149 +69,132 @@ class VectorTilesService {
   /// Add a simple debug layer to test basic visibility
   Future<void> _addDebugLayer(String sourceId) async {
     try {
-      // STEP 1: Try without sourceLayer first (this will show if the source loads)
-      print('🔧 Adding basic debug layer without sourceLayer...');
+      // STEP 1: Use the CORRECT source layer name from Mapbox Studio
+      print('🔧 Adding debug layer with CORRECT sourceLayer: streams2-7jgd8p');
 
       await mapboxMap!.style.addLayer(
         LineLayer(
-          id: 'streams2-debug-basic',
+          id: 'streams2-debug-correct',
           sourceId: sourceId,
-          // NO sourceLayer specified - this will try to render any vector data
+          sourceLayer: 'streams2-7jgd8p', // ✅ CORRECT source layer name!
           lineColor: 0xFFFF0000, // Bright red
           lineWidth: 5.0, // Very thick so it's visible
           lineOpacity: 1.0, // Full opacity
         ),
       );
 
-      print('✅ Added basic debug layer');
+      print('✅ Added correct debug layer');
 
-      // STEP 2: Try with the sourceLayer we think is correct
-      print('🔧 Adding debug layer WITH sourceLayer: streams2...');
-
+      // STEP 2: Also test different stream orders with proper styling
       await mapboxMap!.style.addLayer(
         LineLayer(
-          id: 'streams2-debug-with-source-layer',
+          id: 'streams2-order-1-2',
           sourceId: sourceId,
-          sourceLayer: 'streams2', // This is what we think the source layer is
-          lineColor: 0xFF00FF00, // Bright green
-          lineWidth: 3.0, // Thick
-          lineOpacity: 1.0, // Full opacity
+          sourceLayer: 'streams2-7jgd8p', // ✅ CORRECT source layer name!
+          lineColor: 0xFF87CEEB, // Light blue
+          lineWidth: 1.0,
+          lineOpacity: 0.8,
+          filter: [
+            "<=",
+            ["get", "streamOrde"],
+            2,
+          ], // Note: it's "streamOrde" not "streamOrder"
         ),
       );
 
-      print('✅ Added sourceLayer debug layer');
+      await mapboxMap!.style.addLayer(
+        LineLayer(
+          id: 'streams2-order-3-4',
+          sourceId: sourceId,
+          sourceLayer: 'streams2-7jgd8p', // ✅ CORRECT source layer name!
+          lineColor: 0xFF4682B4, // Steel blue
+          lineWidth: 2.0,
+          lineOpacity: 0.8,
+          filter: [
+            "all",
+            [
+              ">=",
+              ["get", "streamOrde"],
+              3,
+            ],
+            [
+              "<=",
+              ["get", "streamOrde"],
+              4,
+            ],
+          ],
+        ),
+      );
 
-      // STEP 3: Try with different possible source layer names
-      final possibleSourceLayers = [
-        'streams2', // What we expect
-        'default', // Common default
-        'data', // Another common name
-        'layer', // Generic name
-        '', // Empty string
-      ];
+      await mapboxMap!.style.addLayer(
+        LineLayer(
+          id: 'streams2-order-5-plus',
+          sourceId: sourceId,
+          sourceLayer: 'streams2-7jgd8p', // ✅ CORRECT source layer name!
+          lineColor: 0xFF191970, // Midnight blue
+          lineWidth: 3.5,
+          lineOpacity: 0.9,
+          filter: [
+            ">=",
+            ["get", "streamOrde"],
+            5,
+          ],
+        ),
+      );
 
-      for (int i = 0; i < possibleSourceLayers.length; i++) {
-        final layerName = possibleSourceLayers[i];
-        try {
-          await mapboxMap!.style.addLayer(
-            LineLayer(
-              id: 'streams2-debug-test-$i',
-              sourceId: sourceId,
-              sourceLayer: layerName.isEmpty ? null : layerName,
-              lineColor: _getDebugColor(i), // Different color for each test
-              lineWidth: 2.0,
-              lineOpacity: 0.8,
-            ),
-          );
-          print('✅ Added test layer $i with sourceLayer: "$layerName"');
-        } catch (e) {
-          print(
-            '❌ Failed to add test layer $i with sourceLayer "$layerName": $e',
-          );
-        }
-      }
+      print('✅ Added styled stream order layers');
     } catch (e) {
       print('❌ Failed to add debug layers: $e');
       rethrow;
     }
   }
 
-  /// Get different colors for debug layers
-  int _getDebugColor(int index) {
-    final colors = [
-      0xFFFF0000, // Red
-      0xFF00FF00, // Green
-      0xFF0000FF, // Blue
-      0xFFFFFF00, // Yellow
-      0xFFFF00FF, // Magenta
-      0xFF00FFFF, // Cyan
-    ];
-    return colors[index % colors.length];
-  }
-
-  /// Debug the tileset structure by trying to inspect it
+  /// Debug the tileset structure with CORRECT zoom level
   Future<void> _debugTilesetStructure() async {
     try {
       print('🔍 DEBUGGING TILESET STRUCTURE:');
 
-      // Try to query features to see what's actually in the tileset
       if (mapboxMap != null) {
-        print('📊 Attempting to query features from the map...');
-
-        // Get the current camera bounds
         final cameraState = await mapboxMap!.getCameraState();
-        print(
-          '🎯 Current camera: ${cameraState.center.coordinates.lng}, ${cameraState.center.coordinates.lat} at zoom ${cameraState.zoom}',
-        );
+        print('🎯 Current camera zoom: ${cameraState.zoom}');
 
-        // ZOOM LEVEL DEBUG: Test at multiple zoom levels
+        // ✅ ZOOM TO CORRECT LEVEL (7-13 range)
         if (cameraState.zoom < 8) {
-          print('⚠️  ZOOM TOO LOW! Current zoom: ${cameraState.zoom}');
-          print('   Streams typically only visible at zoom 8+');
-          print('   Testing by zooming to a stream-rich area...');
+          print('⚠️  ZOOM TOO LOW! Current: ${cameraState.zoom}, Required: 7+');
+          print('   Zooming to level 9 in stream-rich area...');
 
-          // Zoom to a stream-rich area (St. Louis, Missouri - Mississippi River)
+          // Zoom to Mississippi River at CORRECT zoom level
           await mapboxMap!.setCamera(
             CameraOptions(
               center: Point(coordinates: Position(-90.0715, 38.6270)),
-              zoom: 10.0,
+              zoom: 9.0, // ✅ Within the 7-13 range!
             ),
           );
 
-          // Wait for the zoom to complete and tiles to load
-          await Future.delayed(Duration(seconds: 3));
-          print('🎯 Zoomed to Mississippi River area at zoom 10.0');
+          // Wait for tiles to load
+          await Future.delayed(Duration(seconds: 4));
+          print('🎯 Zoomed to zoom level 9.0');
         }
 
-        // Create a query box in the center of the screen
-        final screenCenter = ScreenCoordinate(x: 200, y: 400); // Rough center
+        // Query with the CORRECT layer IDs
+        final correctLayerIds = [
+          'streams2-debug-correct',
+          'streams2-order-1-2',
+          'streams2-order-3-4',
+          'streams2-order-5-plus',
+        ];
+
+        // Create a larger query area
         final queryBox = RenderedQueryGeometry.fromScreenBox(
           ScreenBox(
-            min: ScreenCoordinate(
-              x: screenCenter.x - 50,
-              y: screenCenter.y - 50,
-            ),
-            max: ScreenCoordinate(
-              x: screenCenter.x + 50,
-              y: screenCenter.y + 50,
-            ),
+            min: ScreenCoordinate(x: 50, y: 50),
+            max: ScreenCoordinate(x: 350, y: 350), // Larger area
           ),
         );
 
-        // Query all our debug layers
-        final debugLayerIds = [
-          'streams2-debug-basic',
-          'streams2-debug-with-source-layer',
-          'streams2-debug-test-0',
-          'streams2-debug-test-1',
-          'streams2-debug-test-2',
-          'streams2-debug-test-3',
-          'streams2-debug-test-4',
-        ];
+        bool foundFeatures = false;
 
-        bool foundAnyFeatures = false;
-
-        for (final layerId in debugLayerIds) {
+        for (final layerId in correctLayerIds) {
           try {
             final features = await mapboxMap!.queryRenderedFeatures(
               queryBox,
@@ -221,74 +204,31 @@ class VectorTilesService {
             print('🔍 Layer "$layerId": Found ${features.length} features');
 
             if (features.isNotEmpty && features.first != null) {
-              foundAnyFeatures = true;
+              foundFeatures = true;
               final feature = features.first!;
               final properties = feature.queriedFeature.feature['properties'];
-              print(
-                '   ✅ SUCCESS! Properties keys: ${(properties is Map) ? (properties).keys.toList() : []}',
-              );
-              if (properties != null &&
-                  properties is Map &&
-                  properties.isNotEmpty) {
-                (properties).forEach((key, value) {
-                  print('     $key: $value');
-                });
-              }
 
-              // If we found features, this layer works!
-              print('🎉 WORKING LAYER FOUND: $layerId');
-              if (layerId.contains('test-0')) {
-                print('   ✅ sourceLayer should be: "streams2"');
-              } else if (layerId.contains('test-1')) {
-                print('   ✅ sourceLayer should be: "default"');
-              } else if (layerId.contains('test-2')) {
-                print('   ✅ sourceLayer should be: "data"');
-              } else if (layerId.contains('test-3')) {
-                print('   ✅ sourceLayer should be: "layer"');
-              } else if (layerId.contains('test-4')) {
-                print('   ✅ sourceLayer should be: "" (empty)');
-              } else if (layerId.contains('basic')) {
-                print('   ✅ No sourceLayer needed');
-              } else if (layerId.contains('with-source-layer')) {
-                print('   ✅ sourceLayer "streams2" works');
+              print('   🎉 SUCCESS! Found streams2 features!');
+              if (properties != null && properties is Map) {
+                print('   Properties: ${properties.keys.toList()}');
+                print('   streamOrde: ${properties['streamOrde']}');
+                print('   station_id: ${properties['station_id']}');
+                print('   STATIONID: ${properties['STATIONID']}');
               }
+              break; // Found working layer, no need to continue
             }
           } catch (e) {
             print('❌ Error querying layer "$layerId": $e');
           }
         }
 
-        if (!foundAnyFeatures) {
-          print('⚠️  STILL NO FEATURES FOUND AT HIGHER ZOOM');
-          print('   This suggests either:');
-          print('   1. Wrong tileset ID');
-          print('   2. Tileset has no data in this area');
-          print('   3. Tileset uses a completely different source layer name');
-          print('   4. Tileset might be corrupted or empty');
-        }
-
-        // Also try a general query without layer restrictions
-        try {
-          print('🔍 Querying ALL rendered features...');
-          final allFeatures = await mapboxMap!.queryRenderedFeatures(
-            queryBox,
-            RenderedQueryOptions(),
-          );
-          print('📊 Total rendered features found: ${allFeatures.length}');
-
-          // Look for any features that might be from our source
-          for (final feature in allFeatures) {
-            if (feature != null) {
-              final source = feature.queriedFeature.source;
-              if (source.contains('streams2')) {
-                print('🎯 Found streams2 feature in source: $source');
-                final layers = feature.layers;
-                print('   Rendered in layers: $layers');
-              }
-            }
-          }
-        } catch (e) {
-          print('❌ Error with general query: $e');
+        if (foundFeatures) {
+          print('🎉 STREAMS2 VECTOR TILES ARE WORKING!');
+          print('   ✅ Correct source layer: streams2-7jgd8p');
+          print('   ✅ Correct zoom level: 7-13');
+          print('   ✅ Features found and accessible');
+        } else {
+          print('⚠️  Still no features - try zooming in more (zoom 10-12)');
         }
       }
     } catch (e) {

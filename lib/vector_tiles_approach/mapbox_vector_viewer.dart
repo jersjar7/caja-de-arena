@@ -49,6 +49,8 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
   @override
   void initState() {
     super.initState();
+    _statusMessage =
+        'streams2 vector tiles ready (zoom 7-13 only)'; // ✅ Updated
     _initializeServices();
   }
 
@@ -421,20 +423,19 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
   Future<void> _initializeMap() async {
     if (mapboxMap == null) return;
 
-    // Set initial camera to continental US
+    // Set camera to correct zoom level
     await mapboxMap!.setCamera(
       CameraOptions(
-        center: Point(coordinates: Position(-98.5795, 39.8283)),
-        zoom: 4.0,
+        center: Point(coordinates: Position(-90.0715, 38.6270)),
+        zoom: 9.0,
       ),
     );
 
-    // Set map style
     await mapboxMap!.loadStyleURI(MapboxStyles.MAPBOX_STREETS);
 
     setState(() {
       _statusMessage =
-          'streams2 vector tiles ready - Toggle the layer to see 364K stream features!';
+          '✅ Ready at zoom 9! Toggle streams2 to see 364K features (source: streams2-7jgd8p)';
     });
   }
 
@@ -453,15 +454,14 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
   Future<void> _loadStreams2VectorLayer() async {
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Loading streams2 vector tiles (364K features)...';
+      _statusMessage =
+          'Loading streams2 vector tiles (source layer: streams2-7jgd8p)...';
     });
 
     final startTime = DateTime.now();
 
     try {
-      // Load the real streams2 tileset
       await _vectorService.addStreams2VectorTiles();
-
       final loadTime = DateTime.now().difference(startTime);
 
       // Record performance metrics
@@ -471,12 +471,13 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
           layerName: 'streams2 (364K features)',
           featureCount: 364115,
           loadTime: loadTime,
-          dataSizeKB: 0, // Vector tiles are streamed
+          dataSizeKB: 0,
           fromCache: false,
           timestamp: DateTime.now(),
           additionalMetrics: {
             'tilesetId': 'jersondevs.dopm8y3j',
-            'sourceLayer': 'streams2',
+            'sourceLayer': 'streams2-7jgd8p', // ✅ Correct source layer
+            'zoomExtent': '7-13',
             'streamOrdered': true,
           },
         ),
@@ -484,7 +485,7 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
 
       setState(() {
         _statusMessage =
-            '✅ Loaded streams2 vector tiles (${loadTime.inMilliseconds}ms) - Tap streams to explore!';
+            '✅ streams2 loaded (${loadTime.inMilliseconds}ms) - Tap streams to explore! 🌊';
       });
     } catch (e) {
       print('❌ streams2 vector loading failed: $e');
@@ -518,12 +519,16 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
           children: [
             Text('Value: $propertyValue'),
             const SizedBox(height: 12),
-            if (propertyKey == 'streamOrde')
+            // ✅ Handle correct field names
+            if (propertyKey ==
+                'streamOrde') // ✅ Note: it's "streamOrde" not "streamOrder"
               Text(
                 'Stream Order $propertyValue: ${_getStreamOrderDescription(propertyValue)}',
               )
-            else if (propertyKey == 'station_id')
-              Text('Station ID for this stream segment'),
+            else if (propertyKey == 'station_id' || propertyKey == 'STATIONID')
+              Text('Station ID for this stream segment')
+            else if (propertyKey == 'Shape_Leng')
+              Text('Length of this stream segment: $propertyValue'),
           ],
         ),
         actions: [
@@ -570,19 +575,19 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
   Future<void> _zoomToStreams() async {
     if (mapboxMap == null) return;
 
-    // Zoom to a stream-rich area (Mississippi River basin)
+    // ✅ Zoom to optimal level for streams2 (within 7-13 range)
     await mapboxMap!.setCamera(
       CameraOptions(
         center: Point(
           coordinates: Position(-90.0715, 38.6270),
         ), // St. Louis area
-        zoom: 10.0,
+        zoom: 11.0, // ✅ Higher zoom for more detail
       ),
     );
 
     setState(() {
       _statusMessage =
-          'Zoomed to stream-rich area - Notice the smooth vector tile performance!';
+          'Zoomed to zoom 11 - Perfect level for streams2 vector tiles!';
     });
   }
 
