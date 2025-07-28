@@ -1,4 +1,4 @@
-// lib/components/mapbox_place_search.dart
+// lib/components/mapbox_place_search.dart (FIXED - Overflow Issue)
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -263,9 +263,9 @@ class _MapboxPlaceSearchWidgetState extends State<MapboxPlaceSearchWidget> {
       await widget.mapboxMap!.flyTo(
         CameraOptions(
           center: Point(coordinates: Position(place.longitude, place.latitude)),
-          zoom: 14.0,
+          zoom: 10.0,
         ),
-        MapAnimationOptions(duration: 2000),
+        MapAnimationOptions(duration: 4000),
       );
 
       print('🎯 Flew to: ${place.shortName}');
@@ -342,12 +342,16 @@ class _MapboxPlaceSearchWidgetState extends State<MapboxPlaceSearchWidget> {
           ),
         ),
 
-        // Results
-        if (_showResults) ...[const SizedBox(height: 8), _buildSearchResults()],
+        // Results - FIXED: Added proper constraints and scrolling
+        if (_showResults) ...[
+          const SizedBox(height: 8),
+          Expanded(child: _buildSearchResults()), // ✅ FIXED: Use Expanded
+        ],
       ],
     );
   }
 
+  // ✅ FIXED: Completely rebuilt search results to handle overflow
   Widget _buildSearchResults() {
     final hasSearchResults = _searchResults.isNotEmpty;
     final hasRecentSearches =
@@ -358,6 +362,7 @@ class _MapboxPlaceSearchWidgetState extends State<MapboxPlaceSearchWidget> {
       return Container(
         padding: const EdgeInsets.all(20),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               CupertinoIcons.location_circle,
@@ -377,8 +382,8 @@ class _MapboxPlaceSearchWidgetState extends State<MapboxPlaceSearchWidget> {
       );
     }
 
+    // ✅ FIXED: Use proper scrollable structure
     return Container(
-      constraints: const BoxConstraints(maxHeight: 300),
       decoration: BoxDecoration(
         color: CupertinoColors.systemBackground,
         borderRadius: BorderRadius.circular(12),
@@ -390,90 +395,128 @@ class _MapboxPlaceSearchWidgetState extends State<MapboxPlaceSearchWidget> {
           ),
         ],
       ),
-      child: CupertinoListSection.insetGrouped(
-        margin: EdgeInsets.zero,
-        children: [
-          // Search results
-          if (hasSearchResults) ...[
-            ..._searchResults.map((place) => _buildPlaceListTile(place, false)),
-          ],
-
-          // Recent searches
-          if (!showingResults && hasRecentSearches) ...[
-            if (hasSearchResults)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: const Text(
-                  'Recent Searches',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: CupertinoColors.secondaryLabel,
-                    fontWeight: FontWeight.w600,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: CustomScrollView(
+          slivers: [
+            // Search results section
+            if (hasSearchResults) ...[
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Text(
+                    showingResults ? 'Search Results' : 'Places',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
                   ),
                 ),
               ),
-            ..._recentSearches.map((place) => _buildPlaceListTile(place, true)),
+              SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  return _buildPlaceListTile(_searchResults[index], false);
+                }, childCount: _searchResults.length),
+              ),
+            ],
+
+            // Recent searches section
+            if (!showingResults && hasRecentSearches) ...[
+              if (hasSearchResults)
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: const Text(
+                      'Recent Searches',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
+                  ),
+                ),
+              SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  return _buildPlaceListTile(_recentSearches[index], true);
+                }, childCount: _recentSearches.length),
+              ),
+            ],
+
+            // Add bottom padding to ensure content doesn't get cut off
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: MediaQuery.of(context).padding.bottom + 20,
+              ),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
 
+  // ✅ IMPROVED: Better styled list tiles
   Widget _buildPlaceListTile(SearchedPlace place, bool isRecent) {
-    return CupertinoListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: isRecent
-              ? CupertinoColors.systemGrey5
-              : CupertinoColors.systemBlue.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Icon(
-          isRecent ? CupertinoIcons.clock : place.categoryIcon,
-          size: 18,
-          color: isRecent
-              ? CupertinoColors.systemGrey
-              : CupertinoColors.systemBlue,
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: CupertinoColors.separator, width: 0.5),
         ),
       ),
-      title: Text(
-        place.shortName,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (place.address != null)
-            Text(
-              place.address!,
-              style: const TextStyle(fontSize: 13),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          if (place.contextString.isNotEmpty)
-            Text(
-              place.contextString,
-              style: const TextStyle(
-                fontSize: 12,
-                color: CupertinoColors.secondaryLabel,
+      child: CupertinoListTile(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        leading: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isRecent
+                ? CupertinoColors.systemGrey5
+                : CupertinoColors.systemBlue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(
+            isRecent ? CupertinoIcons.clock : place.categoryIcon,
+            size: 18,
+            color: isRecent
+                ? CupertinoColors.systemGrey
+                : CupertinoColors.systemBlue,
+          ),
+        ),
+        title: Text(
+          place.shortName,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (place.address != null)
+              Text(
+                place.address!,
+                style: const TextStyle(fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
+            if (place.contextString.isNotEmpty)
+              Text(
+                place.contextString,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        trailing: Icon(
+          CupertinoIcons.location,
+          size: 16,
+          color: CupertinoColors.systemGrey2,
+        ),
+        onTap: () => _selectPlace(place),
       ),
-      trailing: Icon(
-        CupertinoIcons.location,
-        size: 16,
-        color: CupertinoColors.systemGrey2,
-      ),
-      onTap: () => _selectPlace(place),
     );
   }
 }

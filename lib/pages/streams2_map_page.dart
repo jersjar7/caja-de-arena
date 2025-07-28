@@ -1,4 +1,4 @@
-// lib/pages/streams2_map_page.dart
+// lib/pages/streams2_map_page.dart (UPDATED - Bottom Search & No Pop-ups)
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -28,7 +28,7 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
 
   // Selected features
   SelectedVectorFeature? _selectedFeature;
-  SearchedPlace? _selectedPlace;
+  // ✅ REMOVED: _selectedPlace - no more redundant pop-ups
 
   // Map state
   bool _streams2Loaded = false;
@@ -47,7 +47,6 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
     _featureSelection.onFeatureSelected = (feature) {
       setState(() {
         _selectedFeature = feature;
-        _selectedPlace = null; // Clear place selection when feature is selected
         _statusMessage = 'Selected: ${feature.title}';
       });
 
@@ -137,9 +136,9 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
               ),
             ),
 
-          // Search bar overlay
+          // ✅ MOVED: Search bar to bottom with proper safe area
           Positioned(
-            top: 16,
+            bottom: 100, // Above the status bar
             left: 16,
             right: 16,
             child: CompactMapSearchBar(
@@ -149,9 +148,9 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
             ),
           ),
 
-          // Streams2 info badge
+          // Streams2 info badge (moved up to avoid search bar)
           Positioned(
-            top: 80,
+            top: 16,
             right: 16,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -185,10 +184,10 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
             ),
           ),
 
-          // Selected feature overlay
+          // Selected feature overlay (moved higher to avoid search bar)
           if (_selectedFeature != null)
             Positioned(
-              bottom: _selectedPlace != null ? 140 : 80,
+              bottom: 140, // Above search bar
               left: 16,
               right: 16,
               child: CompactVectorFeatureInfo(
@@ -198,16 +197,9 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
               ),
             ),
 
-          // Selected place overlay
-          if (_selectedPlace != null)
-            Positioned(
-              bottom: 80,
-              left: 16,
-              right: 16,
-              child: _buildSelectedPlaceInfo(_selectedPlace!),
-            ),
+          // ✅ REMOVED: Selected place overlay - no more redundant pop-ups
 
-          // Status bar
+          // Status bar at bottom
           Positioned(
             bottom: 0,
             left: 0,
@@ -314,31 +306,31 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
     }
   }
 
+  // ✅ SIMPLIFIED: Just fly to place, no redundant pop-ups
   void _onPlaceSelected(SearchedPlace place) {
+    // Simply update status - no pop-up overlay
     setState(() {
-      _selectedPlace = place;
-      _selectedFeature = null; // Clear feature selection when place is selected
-      _statusMessage = 'Navigated to: ${place.shortName}';
+      _statusMessage = 'Flying to ${place.shortName}...';
     });
 
     print('🎯 User navigated to: ${place.placeName}');
 
-    // Auto-hide place info after 8 seconds
-    Timer(const Duration(seconds: 8), () {
-      if (mounted && _selectedPlace == place) {
+    // Reset status after a short delay
+    Timer(const Duration(seconds: 3), () {
+      if (mounted) {
         setState(() {
-          _selectedPlace = null;
-          _statusMessage = 'Search places to navigate • Tap streams to explore';
+          _statusMessage = 'Tap streams to explore • Search places to navigate';
         });
       }
     });
   }
 
+  // ✅ UPDATED: Show search modal that opens upward from bottom
   void _showFullSearch() {
     showCupertinoModalPopup(
       context: context,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
+        height: MediaQuery.of(context).size.height * 0.75, // Slightly smaller
         decoration: const BoxDecoration(
           color: CupertinoColors.systemBackground,
           borderRadius: BorderRadius.only(
@@ -386,7 +378,7 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
                   mapboxMap: mapboxMap,
                   onPlaceSelected: (place) {
                     _onPlaceSelected(place);
-                    Navigator.pop(context);
+                    Navigator.pop(context); // Close modal
                   },
                   placeholder: 'Search cities, landmarks, addresses...',
                   showRecentSearches: true,
@@ -399,81 +391,7 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
     );
   }
 
-  Widget _buildSelectedPlaceInfo(SearchedPlace place) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemBlue.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: CupertinoColors.systemGrey.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemBlue,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              place.categoryIcon,
-              color: CupertinoColors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  place.shortName,
-                  style: const TextStyle(
-                    color: CupertinoColors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (place.contextString.isNotEmpty)
-                  Text(
-                    place.contextString,
-                    style: const TextStyle(
-                      color: CupertinoColors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () {
-              setState(() {
-                _selectedPlace = null;
-              });
-            },
-            child: const Icon(
-              CupertinoIcons.xmark_circle_fill,
-              color: CupertinoColors.white,
-              size: 20,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ✅ REMOVED: _buildSelectedPlaceInfo - no more redundant overlays
 
   void _showMapInfo() {
     showCupertinoDialog(
@@ -489,7 +407,7 @@ class _Streams2MapPageState extends State<Streams2MapPage> {
             ),
             SizedBox(height: 12),
             Text('Features:', style: TextStyle(fontWeight: FontWeight.w600)),
-            Text('🔍 Search any place worldwide'),
+            Text('🔍 Search any place worldwide (bottom search bar)'),
             Text('🌊 Tap streams to see details'),
             Text('📍 Smooth map navigation'),
             Text('⚡ Fast vector tile rendering'),
