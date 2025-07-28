@@ -1,4 +1,7 @@
 // lib/vector_tiles_approach/vector_tiles_service.dart (DEBUG VERSION)
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 /// Service for managing streams2 Vector Tiles with debugging
@@ -390,6 +393,180 @@ class VectorTilesService {
     } catch (e) {
       print('❌ Error querying streams2 features: $e');
       return [];
+    }
+  }
+
+  // Add this method to your existing VectorTilesService class
+
+  /// Run comprehensive tileset debugging
+  Future<void> runTilesetDiagnostics() async {
+    if (mapboxMap == null) throw Exception('MapboxMap not set');
+
+    print('\n🔬 STARTING COMPREHENSIVE TILESET DIAGNOSTICS');
+
+    // Import the debug helper (you'll need to add the import)
+    // await TilesetDebugHelper.runFullDebug(mapboxMap!, 'jersondevs.dopm8y3j');
+
+    // For now, let's do the key checks inline:
+    await _checkTilesetAccess();
+    await _inspectCurrentMap();
+    await _testKnownTileset();
+  }
+
+  /// Check if your tileset is accessible
+  Future<void> _checkTilesetAccess() async {
+    print('\n📡 CHECKING TILESET ACCESS');
+
+    const accessToken =
+        'pk.eyJ1IjoiamVyc29uZGV2cyIsImEiOiJjbTkxcGQ1emYwM2d1MnFwcWJ2dmgwYmpuIn0.ca52KhzP9gaK5nYDMv0ZxA';
+    const tilesetId = 'jersondevs.dopm8y3j';
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+          'https://api.mapbox.com/v1/$tilesetId?access_token=$accessToken',
+        ),
+      );
+
+      print('📊 Tileset API response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('✅ Tileset exists and is accessible!');
+        print('   Name: ${data['name']}');
+        print('   Type: ${data['type']}');
+        print('   Visibility: ${data['visibility']}');
+
+        if (data['vector_layers'] != null) {
+          print('   Vector layers found:');
+          for (final layer in data['vector_layers']) {
+            print('     🎯 Layer ID: "${layer['id']}"');
+            print('        Description: ${layer['description']}');
+            if (layer['fields'] != null) {
+              print('        Fields: ${layer['fields'].keys.toList()}');
+            }
+          }
+        } else {
+          print('   ⚠️ No vector_layers metadata found');
+        }
+      } else if (response.statusCode == 404) {
+        print('❌ TILESET NOT FOUND');
+        print('   Either the tileset ID is wrong or it doesn\'t exist');
+        print('   Double-check: $tilesetId');
+      } else if (response.statusCode == 401) {
+        print('❌ AUTHENTICATION ERROR');
+        print('   Check your access token or tileset permissions');
+      } else {
+        print('❌ API Error: ${response.statusCode}');
+        print('   Response: ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Network error: $e');
+    }
+  }
+
+  /// Inspect what's currently in the map
+  Future<void> _inspectCurrentMap() async {
+    print('\n🔍 INSPECTING CURRENT MAP STATE');
+
+    try {
+      // Query a large area to see all features
+      final allFeatures = await mapboxMap!.queryRenderedFeatures(
+        RenderedQueryGeometry.fromScreenBox(
+          ScreenBox(
+            min: ScreenCoordinate(x: 0, y: 0),
+            max: ScreenCoordinate(x: 400, y: 800),
+          ),
+        ),
+        RenderedQueryOptions(),
+      );
+
+      final sources = <String>{};
+
+      for (final feature in allFeatures) {
+        if (feature != null) {
+          final source = feature.queriedFeature.source;
+          sources.add(source);
+
+          // Look specifically for our source
+          if (source.contains('streams2') || source.contains('jersondevs')) {
+            print('🎯 FOUND OUR SOURCE: $source');
+            print('   Layers: ${feature.layers}');
+          }
+        }
+      }
+
+      print('📊 Total features found: ${allFeatures.length}');
+      print('📊 Unique sources: ${sources.length}');
+      print('📊 All sources: ${sources.toList()}');
+
+      // Check if our source is loaded but not rendering
+      if (sources.any((s) => s.contains('streams2'))) {
+        print('✅ streams2 source IS loaded and rendering!');
+      } else {
+        print('❌ streams2 source is NOT in rendered features');
+      }
+    } catch (e) {
+      print('❌ Error inspecting map: $e');
+    }
+  }
+
+  /// Test with a known working tileset to verify our code works
+  Future<void> _testKnownTileset() async {
+    print('\n🧪 TESTING WITH KNOWN WORKING TILESET');
+
+    try {
+      // Clean up any existing test
+      try {
+        await mapboxMap!.style.removeStyleLayer('test-working-layer');
+        await mapboxMap!.style.removeStyleSource('test-working-source');
+      } catch (e) {
+        // Ignore
+      }
+
+      // Add Mapbox Streets water layer (this should definitely work)
+      await mapboxMap!.style.addSource(
+        VectorSource(
+          id: 'test-working-source',
+          url: 'mapbox://mapbox.mapbox-streets-v8',
+        ),
+      );
+
+      await mapboxMap!.style.addLayer(
+        LineLayer(
+          id: 'test-working-layer',
+          sourceId: 'test-working-source',
+          sourceLayer: 'waterway', // Known source layer in streets
+          lineColor: 0xFF00FF00, // Bright green
+          lineWidth: 8.0, // Very thick
+        ),
+      );
+
+      print('✅ Added known working tileset (Mapbox Streets waterways)');
+
+      // Wait for tiles to load
+      await Future.delayed(Duration(seconds: 3));
+
+      // Query for features
+      final features = await mapboxMap!.queryRenderedFeatures(
+        RenderedQueryGeometry.fromScreenBox(
+          ScreenBox(
+            min: ScreenCoordinate(x: 150, y: 150),
+            max: ScreenCoordinate(x: 250, y: 250),
+          ),
+        ),
+        RenderedQueryOptions(layerIds: ['test-working-layer']),
+      );
+
+      if (features.isNotEmpty) {
+        print('🎉 SUCCESS! Known tileset works - ${features.length} features');
+        print('   Your code is correct - issue is with your tileset');
+      } else {
+        print('⚠️ No features from known tileset either');
+        print('   This might indicate a broader issue');
+      }
+    } catch (e) {
+      print('❌ Error testing known tileset: $e');
     }
   }
 

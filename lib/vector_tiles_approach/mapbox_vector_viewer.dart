@@ -291,12 +291,25 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
                           child: const Text('Zoom to Streams'),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: CupertinoButton(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           onPressed: _showStreamOrderLegend,
-                          child: const Text('Stream Order Legend'),
+                          child: const Text('Stream Legend'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                          ), // Smaller padding
+                          onPressed: _runTilesetDiagnostics,
+                          child: const Text(
+                            'Debug Tileset',
+                            style: TextStyle(fontSize: 12), // Smaller text
+                          ),
                         ),
                       ),
                     ],
@@ -338,6 +351,24 @@ class _MapboxVectorViewerState extends State<MapboxVectorViewer> {
         ],
       ),
     );
+  }
+
+  Future<void> _runTilesetDiagnostics() async {
+    setState(() {
+      _statusMessage = 'Running tileset diagnostics - check console...';
+    });
+
+    try {
+      await _vectorService.runTilesetDiagnostics();
+
+      setState(() {
+        _statusMessage = 'Diagnostics complete - check console for results';
+      });
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'Diagnostics failed: $e';
+      });
+    }
   }
 
   Widget _buildStatusBar() {
