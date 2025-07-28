@@ -1,7 +1,6 @@
 // lib/vector_tiles_approach/vector_feature_selection.dart
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'dart:convert';
-import 'dart:math' as math;
 
 /// Represents a selected vector tile feature
 class SelectedVectorFeature {
@@ -299,11 +298,30 @@ class VectorFeatureSelectionService {
     try {
       // Get feature data from the query result
       final feature = queriedRenderedFeature.queriedFeature.feature;
-      final layerId = queriedRenderedFeature.queriedFeature.layerId;
-      final sourceId = queriedRenderedFeature.queriedFeature.source;
+
+      // FIXED: More defensive null handling for layers
+      final layerIds = queriedRenderedFeature.layers;
+      String layerId = 'unknown-layer';
+
+      if (layerIds.isNotEmpty) {
+        // Find first non-null layer ID
+        for (final id in layerIds) {
+          if (id != null && id.isNotEmpty) {
+            layerId = id;
+            break;
+          }
+        }
+      }
+
+      // FIXED: More defensive null handling for source
+      String sourceId = 'streams2-source';
+      final source = queriedRenderedFeature.queriedFeature.source;
+      if (source.isNotEmpty) {
+        sourceId = source;
+      }
 
       print(
-        '🔍 Processing streams2 feature from layer: $layerId, source: $sourceId',
+        '🔍 Processing streams2 feature from layers: $layerIds, source: $sourceId',
       );
 
       // Safe type casting for vector tile properties
@@ -332,13 +350,13 @@ class VectorFeatureSelectionService {
       }
 
       return SelectedVectorFeature(
-        layerId: layerId,
+        layerId: layerId, // Now guaranteed to be non-null String
         sourceLayer: sourceLayer,
         featureId: featureId,
         properties: properties,
         geometry: geometry,
         tapLocation: tapLocation,
-        sourceId: sourceId,
+        sourceId: sourceId, // Now guaranteed to be non-null String
       );
     } catch (e) {
       print('❌ Error processing streams2 vector feature: $e');
