@@ -1,5 +1,8 @@
+// lib/cupertino_showcase.dart (UPDATED with both approaches)
 import 'package:flutter/cupertino.dart';
 import 'wfs_approach/mapbox_wfs_viewer.dart';
+import 'vector_tiles_approach/mapbox_vector_viewer.dart';
+import 'vector_tiles_approach/performance_comparison.dart';
 
 class CupertinoShowcase extends StatefulWidget {
   const CupertinoShowcase({super.key});
@@ -221,27 +224,19 @@ class _CupertinoShowcaseState extends State<CupertinoShowcase> {
             ),
             const SizedBox(height: 24),
 
-            // Activity Indicator
+            // NEW: Map Integration Section with both approaches
             const Text(
-              'Activity Indicator',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Center(child: CupertinoActivityIndicator(radius: 20)),
-            const SizedBox(height: 24),
-
-            // Navigation to Map
-            const Text(
-              'Map Integration',
+              'Geospatial Data Integration',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             CupertinoListSection.insetGrouped(
               children: [
+                // WFS Approach
                 CupertinoListTile(
                   title: const Text('WFS Data Viewer'),
                   subtitle: const Text(
-                    'View hydrology data on interactive map',
+                    'Load hydrology data via Web Feature Service (WFS)',
                   ),
                   leading: Container(
                     padding: const EdgeInsets.all(6),
@@ -250,12 +245,36 @@ class _CupertinoShowcaseState extends State<CupertinoShowcase> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(
-                      CupertinoIcons.map_fill,
+                      CupertinoIcons.cloud_download,
                       color: CupertinoColors.white,
                       size: 20,
                     ),
                   ),
-                  trailing: const CupertinoListTileChevron(),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemBlue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'WFS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoColors.systemBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const CupertinoListTileChevron(),
+                    ],
+                  ),
                   onTap: () {
                     Navigator.of(context).push(
                       CupertinoPageRoute<void>(
@@ -266,7 +285,170 @@ class _CupertinoShowcaseState extends State<CupertinoShowcase> {
                     );
                   },
                 ),
+
+                // Vector Tiles Approach
+                CupertinoListTile(
+                  title: const Text('Vector Tiles Viewer'),
+                  subtitle: const Text(
+                    'High-performance rendering with Mapbox Vector Tiles',
+                  ),
+                  leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemPurple,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.cube_box,
+                      color: CupertinoColors.white,
+                      size: 20,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemPurple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'VECTOR',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoColors.systemPurple,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const CupertinoListTileChevron(),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (BuildContext context) {
+                          return const MapboxVectorViewer();
+                        },
+                      ),
+                    );
+                  },
+                ),
+
+                // Performance Comparison
+                CupertinoListTile(
+                  title: const Text('Performance Comparison'),
+                  subtitle: const Text(
+                    'Compare WFS vs Vector Tiles performance metrics',
+                  ),
+                  leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemGreen,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.chart_bar,
+                      color: CupertinoColors.white,
+                      size: 20,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'ANALYSIS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoColors.systemGreen,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const CupertinoListTileChevron(),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (BuildContext context) {
+                          return const PerformanceComparisonWidget();
+                        },
+                      ),
+                    );
+                  },
+                ),
               ],
+            ),
+            const SizedBox(height: 24),
+
+            // NEW: Approach comparison info card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGrey6,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        CupertinoIcons.info_circle,
+                        color: CupertinoColors.systemBlue,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Data Loading Approaches',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'This app demonstrates two different approaches for loading geospatial data:',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '• WFS: Real-time data loading from HydroShare servers',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const Text(
+                    '• Vector Tiles: Pre-processed tiles for optimal performance',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Compare their performance with large datasets!',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: CupertinoColors.systemBlue,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
           ],
