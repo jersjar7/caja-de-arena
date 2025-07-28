@@ -68,20 +68,23 @@ class _VectorFeatureDetailsWidgetState
   }
 
   Widget _buildHeader() {
+    final streamOrder = widget.feature.properties['streamOrde'];
+    final stationId = widget.feature.properties['station_id'];
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          // Feature icon based on geometry type
+          // Feature icon based on stream order
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: CupertinoColors.systemPurple.withOpacity(0.1),
+              color: _getStreamOrderColor(streamOrder).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               _getFeatureIcon(),
-              color: CupertinoColors.systemPurple,
+              color: _getStreamOrderColor(streamOrder),
               size: 24,
             ),
           ),
@@ -111,9 +114,9 @@ class _VectorFeatureDetailsWidgetState
                         color: CupertinoColors.systemPurple.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(
-                        'VECTOR TILES',
-                        style: const TextStyle(
+                      child: const Text(
+                        'STREAMS2 VECTOR',
+                        style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
                           color: CupertinoColors.systemPurple,
@@ -121,23 +124,34 @@ class _VectorFeatureDetailsWidgetState
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        widget.feature.sourceLayer,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: CupertinoColors.secondaryLabel,
+                    if (streamOrder != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        decoration: BoxDecoration(
+                          color: _getStreamOrderColor(
+                            streamOrder,
+                          ).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'ORDER $streamOrder',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: _getStreamOrderColor(streamOrder),
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
                   widget.feature.typeDescription,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     color: CupertinoColors.secondaryLabel,
                   ),
                 ),
@@ -149,6 +163,17 @@ class _VectorFeatureDetailsWidgetState
                     color: CupertinoColors.tertiaryLabel,
                   ),
                 ),
+                if (stationId != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Station ID: $stationId',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.tertiaryLabel,
+                      fontFamily: 'Courier',
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -175,14 +200,14 @@ class _VectorFeatureDetailsWidgetState
         padding: const EdgeInsets.all(32),
         child: Column(
           children: [
-            const Icon(
-              CupertinoIcons.cube_box,
+            Icon(
+              CupertinoIcons.drop_fill,
               size: 48,
-              color: CupertinoColors.systemGrey3,
+              color: CupertinoColors.systemBlue,
             ),
             const SizedBox(height: 16),
             const Text(
-              'No properties available for this vector feature',
+              'No additional properties for this stream feature',
               style: TextStyle(
                 color: CupertinoColors.secondaryLabel,
                 fontSize: 16,
@@ -191,10 +216,11 @@ class _VectorFeatureDetailsWidgetState
             ),
             const SizedBox(height: 8),
             Text(
-              'Source Layer: ${widget.feature.sourceLayer}',
+              'From tileset: jersondevs.dopm8y3j',
               style: const TextStyle(
                 color: CupertinoColors.tertiaryLabel,
                 fontSize: 14,
+                fontFamily: 'Courier',
               ),
               textAlign: TextAlign.center,
             ),
@@ -215,9 +241,37 @@ class _VectorFeatureDetailsWidgetState
   }
 
   Widget _buildPropertyTile(String key, String value) {
+    final isImportantProperty =
+        key.toLowerCase().contains('station') ||
+        key.toLowerCase().contains('stream') ||
+        key.toLowerCase().contains('order');
+
     return CupertinoListTile(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      title: Text(key, style: const TextStyle(fontWeight: FontWeight.w500)),
+      title: Row(
+        children: [
+          if (isImportantProperty)
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemBlue,
+                shape: BoxShape.circle,
+              ),
+            ),
+          Expanded(
+            child: Text(
+              key,
+              style: TextStyle(
+                fontWeight: isImportantProperty
+                    ? FontWeight.w600
+                    : FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
       subtitle: Text(
         value,
         style: const TextStyle(color: CupertinoColors.secondaryLabel),
@@ -253,6 +307,9 @@ class _VectorFeatureDetailsWidgetState
   }
 
   Widget _buildRawDataView() {
+    final streamOrder = widget.feature.properties['streamOrde'];
+    final stationId = widget.feature.properties['station_id'];
+
     final rawData = {
       'feature_id': widget.feature.featureId,
       'layer_id': widget.feature.layerId,
@@ -264,6 +321,18 @@ class _VectorFeatureDetailsWidgetState
       'properties': widget.feature.properties,
       'geometry': widget.feature.geometry,
       'approach': 'vector_tiles',
+      'tileset_info': {
+        'id': 'jersondevs.dopm8y3j',
+        'dataset': 'HydroShare streams2',
+        'total_features': 364115,
+      },
+      'streams2_specific': {
+        'station_id': stationId,
+        'stream_order': streamOrder,
+        'stream_description': streamOrder != null
+            ? _getStreamOrderDescription(streamOrder)
+            : 'Unknown',
+      },
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(rawData);
@@ -276,7 +345,7 @@ class _VectorFeatureDetailsWidgetState
           Row(
             children: [
               const Text(
-                'Raw Vector Feature Data',
+                'Raw streams2 Feature Data',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const Spacer(),
@@ -290,6 +359,22 @@ class _VectorFeatureDetailsWidgetState
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemPurple.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'From tileset: jersondevs.dopm8y3j',
+              style: TextStyle(
+                fontSize: 10,
+                fontFamily: 'Courier',
+                color: CupertinoColors.systemPurple,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -351,7 +436,7 @@ class _VectorFeatureDetailsWidgetState
               padding: const EdgeInsets.symmetric(vertical: 12),
               onPressed: _exportFeature,
               child: const Text(
-                'Export Feature',
+                'Export Stream',
                 style: TextStyle(fontSize: 14),
               ),
             ),
@@ -361,43 +446,58 @@ class _VectorFeatureDetailsWidgetState
     );
   }
 
-  IconData _getFeatureIcon() {
-    final geometry = widget.feature.geometry['type'] as String?;
-    final featureClass = widget.feature.properties['class'] as String?;
+  // Helper methods for streams2-specific functionality
 
-    // Vector tile specific icons based on common classes
-    if (featureClass != null) {
-      switch (featureClass.toLowerCase()) {
-        case 'river':
-        case 'stream':
-        case 'canal':
-          return CupertinoIcons.snow;
-        case 'primary':
-        case 'secondary':
-        case 'trunk':
-          return CupertinoIcons.car_detailed;
-        case 'city':
-        case 'town':
-          return CupertinoIcons.building_2_fill;
-        case 'country':
-          return CupertinoIcons.globe;
-        default:
-          break;
+  IconData _getFeatureIcon() {
+    // For streams2, always show water/stream icons based on stream order
+    final streamOrder = widget.feature.properties['streamOrde'];
+
+    if (streamOrder != null) {
+      final order = streamOrder as int;
+      if (order >= 5) {
+        return CupertinoIcons.drop_fill; // Large rivers
+      } else if (order >= 3) {
+        return CupertinoIcons.drop; // Medium streams
+      } else {
+        return CupertinoIcons.minus; // Small streams
       }
     }
 
-    // Fallback to geometry type
-    switch (geometry) {
-      case 'Point':
-        return CupertinoIcons.location_circle_fill;
-      case 'LineString':
-      case 'MultiLineString':
-        return CupertinoIcons.minus_slash_plus;
-      case 'Polygon':
-      case 'MultiPolygon':
-        return CupertinoIcons.square_fill;
+    // Default for streams2
+    return CupertinoIcons.drop_fill;
+  }
+
+  Color _getStreamOrderColor(dynamic streamOrder) {
+    if (streamOrder == null) return CupertinoColors.systemBlue;
+
+    final order = streamOrder as int;
+    if (order >= 5) {
+      return CupertinoColors.systemIndigo; // Large rivers - dark blue
+    } else if (order >= 3) {
+      return CupertinoColors.systemBlue; // Medium streams - blue
+    } else {
+      return CupertinoColors.systemTeal; // Small streams - light blue
+    }
+  }
+
+  String _getStreamOrderDescription(dynamic order) {
+    switch (order) {
+      case 1:
+        return 'Small headwater stream';
+      case 2:
+        return 'Small tributary';
+      case 3:
+        return 'Medium tributary';
+      case 4:
+        return 'Large tributary';
+      case 5:
+        return 'Small river';
+      case 6:
+        return 'Medium river';
+      case 7:
+        return 'Large river';
       default:
-        return CupertinoIcons.cube_box;
+        return 'Stream segment (Order $order)';
     }
   }
 
@@ -409,7 +509,7 @@ class _VectorFeatureDetailsWidgetState
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Copied!'),
-        content: const Text('Value copied to clipboard'),
+        content: const Text('Stream data copied to clipboard'),
         actions: [
           CupertinoDialogAction(
             child: const Text('OK'),
@@ -421,6 +521,9 @@ class _VectorFeatureDetailsWidgetState
   }
 
   void _exportFeature() {
+    final streamOrder = widget.feature.properties['streamOrde'];
+    final stationId = widget.feature.properties['station_id'];
+
     final exportData = {
       'feature_id': widget.feature.featureId,
       'layer_id': widget.feature.layerId,
@@ -433,16 +536,61 @@ class _VectorFeatureDetailsWidgetState
       'geometry': widget.feature.geometry,
       'exported_at': DateTime.now().toIso8601String(),
       'approach': 'vector_tiles',
+      'tileset_id': 'jersondevs.dopm8y3j',
+      'dataset_info': {
+        'name': 'HydroShare streams2',
+        'total_features': 364115,
+        'source': 'HydroShare WFS converted to vector tiles',
+        'uploaded_by': 'jersondevs',
+      },
+      'streams2_specific': {
+        'station_id': stationId,
+        'stream_order': streamOrder,
+        'stream_description': streamOrder != null
+            ? _getStreamOrderDescription(streamOrder)
+            : 'Unknown',
+        'visual_style': _getVisualStyleInfo(streamOrder),
+      },
       'performance_benefits': [
-        'Faster rendering',
+        'Faster rendering than WFS',
         'Better zoom performance',
         'Reduced bandwidth usage',
         'Server-side optimization',
+        'Handles 364K features smoothly',
+        'Stream order-based styling',
       ],
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
     _copyToClipboard(jsonString);
+  }
+
+  Map<String, dynamic> _getVisualStyleInfo(dynamic streamOrder) {
+    if (streamOrder == null) return {'layer': 'unknown', 'style': 'default'};
+
+    final order = streamOrder as int;
+    if (order >= 5) {
+      return {
+        'layer': 'streams2-order-5-plus',
+        'color': 'midnight_blue',
+        'width': 3.5,
+        'description': 'Major rivers - thick dark blue lines',
+      };
+    } else if (order >= 3) {
+      return {
+        'layer': 'streams2-order-3-4',
+        'color': 'steel_blue',
+        'width': 2.0,
+        'description': 'Tributaries - medium blue lines',
+      };
+    } else {
+      return {
+        'layer': 'streams2-order-1-2',
+        'color': 'light_blue',
+        'width': 1.0,
+        'description': 'Small streams - thin light blue lines',
+      };
+    }
   }
 }
 
@@ -478,6 +626,8 @@ class CompactVectorFeatureInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final streamOrder = feature.properties['streamOrde'];
+
     return Container(
       margin: const EdgeInsets.all(8),
       padding: const EdgeInsets.all(12),
@@ -497,8 +647,8 @@ class CompactVectorFeatureInfo extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              CupertinoIcons.cube_box_fill,
-              color: CupertinoColors.systemPurple,
+              _getStreamIcon(streamOrder),
+              color: _getStreamColor(streamOrder),
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -542,7 +692,7 @@ class CompactVectorFeatureInfo extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${feature.sourceLayer} • ${feature.typeDescription}',
+                    'streams2 • ${feature.typeDescription}',
                     style: const TextStyle(
                       color: CupertinoColors.secondaryLabel,
                       fontSize: 12,
@@ -562,5 +712,23 @@ class CompactVectorFeatureInfo extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _getStreamIcon(dynamic streamOrder) {
+    if (streamOrder == null) return CupertinoIcons.drop_fill;
+
+    final order = streamOrder as int;
+    if (order >= 5) return CupertinoIcons.drop_fill;
+    if (order >= 3) return CupertinoIcons.drop;
+    return CupertinoIcons.minus;
+  }
+
+  Color _getStreamColor(dynamic streamOrder) {
+    if (streamOrder == null) return CupertinoColors.systemBlue;
+
+    final order = streamOrder as int;
+    if (order >= 5) return CupertinoColors.systemIndigo;
+    if (order >= 3) return CupertinoColors.systemBlue;
+    return CupertinoColors.systemTeal;
   }
 }

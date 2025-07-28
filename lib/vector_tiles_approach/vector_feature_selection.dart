@@ -23,54 +23,69 @@ class SelectedVectorFeature {
     required this.sourceId,
   });
 
-  /// Get a human-readable title for the feature
+  /// Get a human-readable title for the feature (optimized for streams2)
   String get title {
-    // Try common title fields for vector tiles
-    final titleFields = [
-      'name',
-      'name_en',
-      'name:en',
-      'class',
-      'type',
-      'subclass',
-      'ref',
-      'id',
-    ];
+    // For streams2, create meaningful titles
+    final stationId = properties['station_id'];
+    final streamOrder = properties['streamOrde'];
 
-    for (final field in titleFields) {
-      if (properties.containsKey(field) && properties[field] != null) {
-        final value = properties[field].toString();
-        if (value.isNotEmpty && value != 'null') {
-          return value;
-        }
-      }
+    if (stationId != null && streamOrder != null) {
+      return 'Stream ${_formatStationId(stationId)} (Order $streamOrder)';
+    } else if (stationId != null) {
+      return 'Stream Station $stationId';
+    } else if (streamOrder != null) {
+      return 'Stream Order $streamOrder';
     }
 
     // Fallback to layer identification
-    if (sourceLayer.isNotEmpty) {
-      return '${sourceLayer.toUpperCase()} Feature';
-    }
-
-    return 'Vector Feature';
+    return 'streams2 Feature';
   }
 
-  /// Get feature type description
+  /// Get feature type description (optimized for streams2)
   String get typeDescription {
-    final geometryType = geometry['type'] as String?;
-    final featureClass = properties['class'] as String?;
-    final featureType = properties['type'] as String?;
+    final streamOrder = properties['streamOrde'];
 
-    if (featureClass != null && featureType != null) {
-      return '$featureClass ($featureType)';
-    } else if (featureClass != null) {
-      return featureClass;
-    } else if (featureType != null) {
-      return featureType;
-    } else if (geometryType != null) {
-      return geometryType;
+    if (streamOrder != null) {
+      return _getStreamOrderDescription(streamOrder);
     }
 
-    return 'Unknown';
+    return 'Stream segment';
+  }
+
+  /// Format station ID for display
+  String _formatStationId(dynamic stationId) {
+    if (stationId == null) return 'Unknown';
+    final id = stationId.toString();
+    // Add formatting if needed (e.g., add commas for large numbers)
+    if (id.length > 3) {
+      return id.replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+    }
+    return id;
+  }
+
+  /// Get stream order description
+  String _getStreamOrderDescription(dynamic order) {
+    switch (order) {
+      case 1:
+        return 'Small headwater stream';
+      case 2:
+        return 'Small tributary';
+      case 3:
+        return 'Medium tributary';
+      case 4:
+        return 'Large tributary';
+      case 5:
+        return 'Small river';
+      case 6:
+        return 'Medium river';
+      case 7:
+        return 'Large river';
+      default:
+        return 'Stream segment (Order $order)';
+    }
   }
 
   /// Get coordinates as a readable string
@@ -84,6 +99,13 @@ class SelectedVectorFeature {
       } else if (geometry['type'] == 'LineString') {
         final coords = geometry['coordinates'] as List;
         return 'Line with ${coords.length} points';
+      } else if (geometry['type'] == 'MultiLineString') {
+        final coords = geometry['coordinates'] as List;
+        int totalPoints = 0;
+        for (final line in coords) {
+          if (line is List) totalPoints += line.length;
+        }
+        return 'Multi-line with $totalPoints total points';
       } else if (geometry['type'] == 'Polygon') {
         return 'Polygon geometry';
       }
@@ -163,7 +185,7 @@ class VectorFeatureSelectionService {
   /// Set the MapboxMap instance
   void setMapboxMap(MapboxMap map) {
     mapboxMap = map;
-    print('✅ Vector feature selection service ready');
+    print('✅ Vector feature selection service ready for streams2');
   }
 
   /// Register layer information for selection
@@ -205,7 +227,7 @@ class VectorFeatureSelectionService {
     }
   }
 
-  /// Query vector tile features at a specific point
+  /// Query vector tile features at a specific point (optimized for streams2)
   Future<List<SelectedVectorFeature>> _queryVectorFeaturesAtPoint(
     Point tapPoint,
     ScreenCoordinate touchPosition,
@@ -214,31 +236,30 @@ class VectorFeatureSelectionService {
 
     final selectedFeatures = <SelectedVectorFeature>[];
 
-    // Create a query area around the tap point
+    // Create a query area around the tap point (larger for line features)
     final queryBox = RenderedQueryGeometry.fromScreenBox(
       ScreenBox(
-        min: ScreenCoordinate(x: touchPosition.x - 5, y: touchPosition.y - 5),
-        max: ScreenCoordinate(x: touchPosition.x + 5, y: touchPosition.y + 5),
+        min: ScreenCoordinate(x: touchPosition.x - 8, y: touchPosition.y - 8),
+        max: ScreenCoordinate(x: touchPosition.x + 8, y: touchPosition.y + 8),
       ),
     );
 
-    // Get all registered layer IDs for querying
-    final layerIds = _layerInfo.keys.toList();
-
-    if (layerIds.isEmpty) {
-      print('⚠️ No vector layers registered for selection');
-      return [];
-    }
+    // Query streams2 layers specifically
+    final streams2LayerIds = [
+      'streams2-order-1-2',
+      'streams2-order-3-4',
+      'streams2-order-5-plus',
+    ];
 
     try {
-      // Query all registered vector layers
+      // Query streams2 vector layers
       final List<QueriedRenderedFeature?> queryResult = await mapboxMap!
           .queryRenderedFeatures(
             queryBox,
-            RenderedQueryOptions(layerIds: layerIds),
+            RenderedQueryOptions(layerIds: streams2LayerIds),
           );
 
-      print('📊 Found ${queryResult.length} vector features in query');
+      print('📊 Found ${queryResult.length} streams2 features in query');
 
       // Process each found feature
       for (final queriedRenderedFeature in queryResult) {
@@ -252,19 +273,19 @@ class VectorFeatureSelectionService {
               selectedFeatures.add(selectedFeature);
             }
           } catch (e) {
-            print('⚠️ Error processing vector feature: $e');
+            print('⚠️ Error processing streams2 feature: $e');
           }
         }
       }
 
-      print('📊 Processed ${selectedFeatures.length} valid vector features');
+      print('📊 Processed ${selectedFeatures.length} valid streams2 features');
 
-      // Return topmost feature (vector tiles are already ordered by rendering priority)
+      // Return the first feature (streams are already ordered by importance)
       if (selectedFeatures.isNotEmpty) {
         return [selectedFeatures.first];
       }
     } catch (e) {
-      print('⚠️ Error querying vector features: $e');
+      print('⚠️ Error querying streams2 features: $e');
     }
 
     return [];
@@ -282,7 +303,7 @@ class VectorFeatureSelectionService {
       final sourceId = queriedRenderedFeature.queriedFeature.source;
 
       print(
-        '🔍 Processing vector feature from layer: $layerId, source: $sourceId',
+        '🔍 Processing streams2 feature from layer: $layerId, source: $sourceId',
       );
 
       // Safe type casting for vector tile properties
@@ -293,25 +314,22 @@ class VectorFeatureSelectionService {
           ? Map<String, dynamic>.from(feature['geometry'] as Map)
           : <String, dynamic>{};
 
-      // Extract source layer from the feature or layer metadata
-      String sourceLayer = '';
-      if (_layerInfo.containsKey(layerId)) {
-        sourceLayer = _layerInfo[layerId]!['sourceLayer'] as String? ?? '';
-      }
-
-      // Try to get source layer from properties if not found
-      if (sourceLayer.isEmpty) {
-        sourceLayer =
-            properties['layer'] as String? ??
-            properties['source-layer'] as String? ??
-            layerId;
-      }
+      // For streams2, the source layer is always 'streams2'
+      final sourceLayer = 'streams2';
 
       final featureId =
           feature['id']?.toString() ??
-          properties['id']?.toString() ??
-          properties['osm_id']?.toString() ??
-          'unknown_${DateTime.now().millisecondsSinceEpoch}';
+          properties['station_id']?.toString() ??
+          'streams2_${DateTime.now().millisecondsSinceEpoch}';
+
+      // Log the properties for debugging
+      print('🔍 streams2 properties: ${properties.keys.toList()}');
+      if (properties.containsKey('station_id')) {
+        print('   station_id: ${properties['station_id']}');
+      }
+      if (properties.containsKey('streamOrde')) {
+        print('   streamOrde: ${properties['streamOrde']}');
+      }
 
       return SelectedVectorFeature(
         layerId: layerId,
@@ -323,7 +341,7 @@ class VectorFeatureSelectionService {
         sourceId: sourceId,
       );
     } catch (e) {
-      print('❌ Error processing vector feature: $e');
+      print('❌ Error processing streams2 vector feature: $e');
       return null;
     }
   }
@@ -350,6 +368,12 @@ class VectorFeatureSelectionService {
       'geometry': feature.geometry,
       'selectedAt': DateTime.now().toIso8601String(),
       'approach': 'vector_tiles',
+      'tileset_id': 'jersondevs.dopm8y3j',
+      'dataset_info': {
+        'name': 'HydroShare streams2',
+        'total_features': 364115,
+        'source': 'HydroShare WFS converted to vector tiles',
+      },
     };
 
     return jsonEncode(exportData);
@@ -388,20 +412,28 @@ class VectorFeatureSelectionService {
       'hasSelectedFeature': _selectedFeature != null,
       'selectedFeatureType': _selectedFeature?.typeDescription,
       'selectedSourceLayer': _selectedFeature?.sourceLayer,
+      'streams2Optimized': true,
+      'supportedProperties': ['station_id', 'streamOrde'],
     };
   }
 
   /// Print selection statistics
   void printSelectionStats() {
     final stats = getSelectionStats();
-    print('\n📊 VECTOR FEATURE SELECTION STATS:');
+    print('\n📊 STREAMS2 VECTOR FEATURE SELECTION STATS:');
     print('Registered layers: ${stats['registeredLayers']}');
     print('Layer IDs: ${stats['layerIds']}');
     print('Has selected feature: ${stats['hasSelectedFeature']}');
     if (stats['hasSelectedFeature']) {
       print('Selected feature type: ${stats['selectedFeatureType']}');
       print('Selected source layer: ${stats['selectedSourceLayer']}');
+      if (_selectedFeature != null) {
+        print('Station ID: ${_selectedFeature!.properties['station_id']}');
+        print('Stream Order: ${_selectedFeature!.properties['streamOrde']}');
+      }
     }
+    print('streams2 optimized: ${stats['streams2Optimized']}');
+    print('Supported properties: ${stats['supportedProperties']}');
   }
 
   /// Dispose resources
@@ -411,5 +443,6 @@ class VectorFeatureSelectionService {
     onEmptyTap = null;
     _selectedFeature = null;
     _layerInfo.clear();
+    print('🗑️ Vector feature selection service disposed');
   }
 }

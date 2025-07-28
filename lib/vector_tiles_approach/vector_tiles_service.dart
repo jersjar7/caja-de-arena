@@ -1,9 +1,7 @@
 // lib/vector_tiles_approach/vector_tiles_service.dart
-import 'dart:ui';
-
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
-/// Service for managing Mapbox Vector Tiles
+/// Service for managing streams2 Vector Tiles
 class VectorTilesService {
   MapboxMap? mapboxMap;
 
@@ -18,34 +16,34 @@ class VectorTilesService {
   /// Set the MapboxMap instance
   void setMapboxMap(MapboxMap map) {
     mapboxMap = map;
-    print('✅ Vector Tiles Service ready');
+    print('✅ Vector Tiles Service ready for streams2');
   }
 
-  /// Add a Mapbox Vector Tiles source
-  Future<void> addVectorTileSource({
-    required String sourceId,
-    required String tilesetId,
-    required String accessToken,
-  }) async {
+  /// Add streams2 vector tiles with stream order styling
+  Future<void> addStreams2VectorTiles() async {
     if (mapboxMap == null) throw Exception('MapboxMap not set');
 
+    final sourceId = 'streams2-source';
     _loadStartTimes[sourceId] = DateTime.now();
 
     try {
-      // Remove existing source if it exists
-      try {
-        await mapboxMap!.style.removeStyleSource(sourceId);
-      } catch (e) {
-        // Source might not exist, that's fine
-      }
+      // Remove existing source and layers if they exist
+      await removeStreams2Layers();
 
-      // For demonstration, we'll use a sample Mapbox tileset
-      // In production, you'd upload your HydroShare data to Mapbox as a tileset
-      final tileUrl = 'mapbox://$tilesetId';
+      print('🚀 Adding streams2 vector source: jersondevs.dopm8y3j');
 
+      // Add the vector source with your real tileset
       await mapboxMap!.style.addSource(
-        VectorSource(id: sourceId, url: tileUrl),
+        VectorSource(
+          id: sourceId,
+          url: 'mapbox://jersondevs.dopm8y3j', // Your real tileset ID!
+        ),
       );
+
+      print('✅ streams2 vector source added, now adding styled layers...');
+
+      // Add multiple layers styled by stream order
+      await _addStreamOrderLayers(sourceId);
 
       _loadedTilesets.add(sourceId);
       _loadDurations[sourceId] = DateTime.now().difference(
@@ -53,174 +51,163 @@ class VectorTilesService {
       );
       _totalTilesLoaded++;
 
-      print('✅ Vector tile source added: $sourceId');
-      print('   Tileset: $tilesetId');
+      print('✅ streams2 vector tiles loaded with stream order styling');
+      print('   Features: 364,115 streams');
       print('   Load time: ${_loadDurations[sourceId]!.inMilliseconds}ms');
     } catch (e) {
-      print('❌ Failed to add vector tile source $sourceId: $e');
+      print('❌ Failed to add streams2 vector tiles: $e');
       rethrow;
     }
   }
 
-  /// Add a vector tile layer for streams
-  Future<void> addStreamLayer({
-    required String layerId,
-    required String sourceId,
-    required String sourceLayer,
-    Color color = const Color(0xFF0066CC),
-    double width = 2.0,
-  }) async {
-    if (mapboxMap == null) throw Exception('MapboxMap not set');
+  /// Add multiple layers for different stream orders
+  Future<void> _addStreamOrderLayers(String sourceId) async {
+    // Layer 1: Stream Order 1-2 (Small streams) - Light blue, thin
+    await mapboxMap!.style.addLayer(
+      LineLayer(
+        id: 'streams2-order-1-2',
+        sourceId: sourceId,
+        sourceLayer: 'streams2', // This matches your GeoJSON filename
+        lineColor: 0xFF87CEEB, // Light blue
+        lineWidth: 1.0,
+        lineOpacity: 0.8,
+        filter: [
+          'all',
+          [
+            '>=',
+            ['get', 'streamOrde'],
+            1,
+          ],
+          [
+            '<=',
+            ['get', 'streamOrde'],
+            2,
+          ],
+        ],
+      ),
+    );
 
-    try {
-      // Remove existing layer if it exists
-      try {
-        await mapboxMap!.style.removeStyleLayer(layerId);
-      } catch (e) {
-        // Layer might not exist
-      }
+    // Layer 2: Stream Order 3-4 (Medium streams) - Medium blue, medium width
+    await mapboxMap!.style.addLayer(
+      LineLayer(
+        id: 'streams2-order-3-4',
+        sourceId: sourceId,
+        sourceLayer: 'streams2',
+        lineColor: 0xFF4682B4, // Steel blue
+        lineWidth: 2.0,
+        lineOpacity: 0.9,
+        filter: [
+          'all',
+          [
+            '>=',
+            ['get', 'streamOrde'],
+            3,
+          ],
+          [
+            '<=',
+            ['get', 'streamOrde'],
+            4,
+          ],
+        ],
+      ),
+    );
 
-      await mapboxMap!.style.addLayer(
-        LineLayer(
-          id: layerId,
-          sourceId: sourceId,
-          sourceLayer: sourceLayer,
-          lineColor: color.value,
-          lineWidth: width,
-          lineOpacity: 0.8,
-        ),
-      );
+    // Layer 3: Stream Order 5+ (Large rivers) - Dark blue, thick
+    await mapboxMap!.style.addLayer(
+      LineLayer(
+        id: 'streams2-order-5-plus',
+        sourceId: sourceId,
+        sourceLayer: 'streams2',
+        lineColor: 0xFF191970, // Midnight blue
+        lineWidth: 3.5,
+        lineOpacity: 1.0,
+        filter: [
+          '>=',
+          ['get', 'streamOrde'],
+          5,
+        ],
+      ),
+    );
 
-      print('✅ Stream vector layer added: $layerId');
-    } catch (e) {
-      print('❌ Failed to add stream layer $layerId: $e');
-      rethrow;
-    }
+    print('✅ Added 3 stream order layers for visual hierarchy');
   }
 
-  /// Add a vector tile layer for points (gauges, etc.)
-  Future<void> addPointLayer({
-    required String layerId,
-    required String sourceId,
-    required String sourceLayer,
-    Color color = const Color(0xFFFF0000),
-    double radius = 6.0,
-  }) async {
-    if (mapboxMap == null) throw Exception('MapboxMap not set');
-
-    try {
-      // Remove existing layer if it exists
-      try {
-        await mapboxMap!.style.removeStyleLayer(layerId);
-      } catch (e) {
-        // Layer might not exist
-      }
-
-      await mapboxMap!.style.addLayer(
-        CircleLayer(
-          id: layerId,
-          sourceId: sourceId,
-          sourceLayer: sourceLayer,
-          circleRadius: radius,
-          circleColor: color.value,
-          circleStrokeColor: 0xFFFFFFFF,
-          circleStrokeWidth: 1.0,
-          circleOpacity: 0.9,
-        ),
-      );
-
-      print('✅ Point vector layer added: $layerId');
-    } catch (e) {
-      print('❌ Failed to add point layer $layerId: $e');
-      rethrow;
-    }
-  }
-
-  /// Set layer visibility
-  Future<void> setLayerVisibility(String layerId, bool visible) async {
+  /// Remove all streams2 layers and source
+  Future<void> removeStreams2Layers() async {
     if (mapboxMap == null) return;
 
+    final layersToRemove = [
+      'streams2-order-1-2',
+      'streams2-order-3-4',
+      'streams2-order-5-plus',
+    ];
+
+    // Remove layers
+    for (final layerId in layersToRemove) {
+      try {
+        await mapboxMap!.style.removeStyleLayer(layerId);
+        print('✅ Removed layer: $layerId');
+      } catch (e) {
+        // Layer might not exist, that's fine
+      }
+    }
+
+    // Remove source
     try {
-      await mapboxMap!.style.setStyleLayerProperty(
-        layerId,
-        'visibility',
-        visible ? 'visible' : 'none',
-      );
-      print('✅ Set visibility for $layerId: $visible');
+      await mapboxMap!.style.removeStyleSource('streams2-source');
+      _loadedTilesets.remove('streams2-source');
+      print('✅ Removed streams2 source');
     } catch (e) {
-      print('❌ Failed to set layer visibility: $e');
+      // Source might not exist, that's fine
     }
   }
 
-  /// Update layer color
-  Future<void> updateLayerColor(String layerId, Color color) async {
+  /// Set streams2 layer visibility
+  Future<void> setStreams2Visibility(bool visible) async {
     if (mapboxMap == null) return;
 
-    try {
-      // Try as line layer first
+    final visibility = visible ? 'visible' : 'none';
+    final layers = [
+      'streams2-order-1-2',
+      'streams2-order-3-4',
+      'streams2-order-5-plus',
+    ];
+
+    for (final layerId in layers) {
       try {
         await mapboxMap!.style.setStyleLayerProperty(
           layerId,
-          'line-color',
-          color.value,
+          'visibility',
+          visibility,
         );
-        return;
       } catch (e) {
-        // Not a line layer, try circle
+        print('⚠️ Could not set visibility for $layerId: $e');
       }
-
-      // Try as circle layer
-      await mapboxMap!.style.setStyleLayerProperty(
-        layerId,
-        'circle-color',
-        color.value,
-      );
-
-      print('✅ Updated color for $layerId');
-    } catch (e) {
-      print('❌ Failed to update layer color: $e');
     }
+
+    print('✅ Set streams2 visibility: $visible');
   }
 
-  /// Remove a layer
-  Future<void> removeLayer(String layerId) async {
-    if (mapboxMap == null) return;
-
-    try {
-      await mapboxMap!.style.removeStyleLayer(layerId);
-      print('✅ Removed layer: $layerId');
-    } catch (e) {
-      print('⚠️ Layer $layerId might not exist: $e');
-    }
-  }
-
-  /// Remove a source (and all its layers)
-  Future<void> removeSource(String sourceId) async {
-    if (mapboxMap == null) return;
-
-    try {
-      await mapboxMap!.style.removeStyleSource(sourceId);
-      _loadedTilesets.remove(sourceId);
-      print('✅ Removed source: $sourceId');
-    } catch (e) {
-      print('⚠️ Source $sourceId might not exist: $e');
-    }
-  }
-
-  /// Query vector tile features at a point
-  Future<List<QueriedRenderedFeature?>> queryFeaturesAtPoint({
+  /// Query streams2 features at a point
+  Future<List<QueriedRenderedFeature?>> queryStreams2AtPoint({
     required ScreenCoordinate point,
-    List<String>? layerIds,
   }) async {
     if (mapboxMap == null) return [];
 
     try {
       final queryBox = RenderedQueryGeometry.fromScreenBox(
         ScreenBox(
-          min: ScreenCoordinate(x: point.x - 5, y: point.y - 5),
-          max: ScreenCoordinate(x: point.x + 5, y: point.y + 5),
+          min: ScreenCoordinate(x: point.x - 8, y: point.y - 8),
+          max: ScreenCoordinate(x: point.x + 8, y: point.y + 8),
         ),
       );
+
+      // Query all streams2 layers
+      final layerIds = [
+        'streams2-order-1-2',
+        'streams2-order-3-4',
+        'streams2-order-5-plus',
+      ];
 
       final features = await mapboxMap!.queryRenderedFeatures(
         queryBox,
@@ -229,90 +216,8 @@ class VectorTilesService {
 
       return features;
     } catch (e) {
-      print('❌ Error querying vector tile features: $e');
+      print('❌ Error querying streams2 features: $e');
       return [];
-    }
-  }
-
-  /// Add a sample Mapbox Streets tileset source for demonstration
-  Future<void> addSampleStreamsSource() async {
-    if (mapboxMap == null) throw Exception('MapboxMap not set');
-
-    try {
-      // This uses a built-in Mapbox tileset for demonstration
-      // In production, you'd upload your HydroShare streams data to Mapbox
-      await mapboxMap!.style.addSource(
-        VectorSource(
-          id: 'sample-streams-source',
-          url: 'mapbox://mapbox.mapbox-streets-v8',
-        ),
-      );
-
-      // Add a layer using the waterway data from Mapbox Streets
-      await mapboxMap!.style.addLayer(
-        LineLayer(
-          id: 'sample-streams',
-          sourceId: 'sample-streams-source',
-          sourceLayer: 'waterway', // This is the layer name within the tileset
-          lineColor: 0xFF0066CC,
-          lineWidth: 2.0,
-          lineOpacity: 0.8,
-          filter: [
-            'in',
-            ['get', 'class'],
-            [
-              'literal',
-              ['river', 'stream', 'canal'],
-            ],
-          ],
-        ),
-      );
-
-      _loadedTilesets.add('sample-streams-source');
-      print('✅ Sample streams vector layer added using Mapbox Streets');
-      print('   This demonstrates vector tile performance with built-in data');
-    } catch (e) {
-      print('❌ Failed to add sample streams: $e');
-      rethrow;
-    }
-  }
-
-  /// Add a sample point layer for cities (to demonstrate point vector tiles)
-  Future<void> addSamplePointsSource() async {
-    if (mapboxMap == null) throw Exception('MapboxMap not set');
-
-    try {
-      // Use built-in place labels for demonstration
-      await mapboxMap!.style.addSource(
-        VectorSource(
-          id: 'sample-points-source',
-          url: 'mapbox://mapbox.mapbox-streets-v8',
-        ),
-      );
-
-      await mapboxMap!.style.addLayer(
-        CircleLayer(
-          id: 'sample-cities',
-          sourceId: 'sample-points-source',
-          sourceLayer: 'place_label',
-          circleRadius: 8.0,
-          circleColor: 0xFFFF6600,
-          circleStrokeColor: 0xFFFFFFFF,
-          circleStrokeWidth: 2.0,
-          circleOpacity: 0.8,
-          filter: [
-            '==',
-            ['get', 'type'],
-            'city',
-          ],
-        ),
-      );
-
-      _loadedTilesets.add('sample-points-source');
-      print('✅ Sample points vector layer added using Mapbox Streets cities');
-    } catch (e) {
-      print('❌ Failed to add sample points: $e');
-      rethrow;
     }
   }
 
@@ -333,17 +238,22 @@ class VectorTilesService {
       'loadDurations': _loadDurations.map(
         (key, value) => MapEntry(key, value.inMilliseconds),
       ),
+      'streams2Loaded': _loadedTilesets.contains('streams2-source'),
     };
   }
 
   /// Print performance summary
   void printPerformanceStats() {
     final stats = getPerformanceStats();
-    print('\n📊 VECTOR TILES PERFORMANCE STATS:');
+    print('\n📊 STREAMS2 VECTOR TILES PERFORMANCE:');
+    print('streams2 loaded: ${stats['streams2Loaded']}');
     print('Total tilesets: ${stats['totalTilesets']}');
-    print('Total tiles loaded: ${stats['totalTilesLoaded']}');
     print('Average load time: ${stats['averageLoadTime']}ms');
-    print('Loaded sources: ${stats['loadedSources']}');
+
+    if (stats['streams2Loaded']) {
+      print('✅ 364,115 stream features ready for interaction');
+      print('✅ 3 layers styled by stream order (1-2, 3-4, 5+)');
+    }
 
     if (_loadDurations.isNotEmpty) {
       print('\nLoad times by source:');
@@ -353,10 +263,8 @@ class VectorTilesService {
     }
   }
 
-  /// Check if a source is loaded
-  bool isSourceLoaded(String sourceId) {
-    return _loadedTilesets.contains(sourceId);
-  }
+  /// Check if streams2 is loaded
+  bool get isStreams2Loaded => _loadedTilesets.contains('streams2-source');
 
   /// Get list of loaded sources
   List<String> get loadedSources => _loadedTilesets.toList();
@@ -367,5 +275,6 @@ class VectorTilesService {
     _loadStartTimes.clear();
     _loadDurations.clear();
     mapboxMap = null;
+    print('🗑️ Vector tiles service disposed');
   }
 }
