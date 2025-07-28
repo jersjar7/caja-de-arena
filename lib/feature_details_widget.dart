@@ -407,7 +407,8 @@ class CompactFeatureInfo extends StatelessWidget {
           ),
         ],
       ),
-      child: InkWell(
+      child: GestureDetector(
+        // FIXED: Changed from InkWell to GestureDetector
         onTap: onTap,
         child: Row(
           children: [
