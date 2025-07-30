@@ -38,6 +38,7 @@ dependencies:
   http: ^1.4.0
   shared_preferences: ^2.5.3
   geolocator: ^14.0.2
+  fl_chart: ^1.0.0
 
 dev_dependencies:
   flutter_test:

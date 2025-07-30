@@ -1,3 +1,7 @@
+import 'package:cupertino_showcase/pages/CupertinoRiverFavoritesPage.dart';
+import 'package:cupertino_showcase/pages/CupertinoShortRangePage.dart';
+import 'package:cupertino_showcase/pages/DarkModeRiverFlowChartPage.dart';
+import 'package:cupertino_showcase/pages/RiverFlowChartPage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'cupertino_showcase.dart';
@@ -26,7 +30,17 @@ class MyApp extends StatelessWidget {
     return const CupertinoApp(
       title: 'Cupertino Widgets Demo',
       theme: CupertinoThemeData(primaryColor: CupertinoColors.systemBlue),
-      home: CupertinoShowcase(),
+      // home: DarkModeRiverFlowChartPage(
+      //   stationName: 'Default Station',
+      //   rivername: 'Default River',
+      // ),
+      // home: CupertinoRiverFavoritesPage(),
+      home: CupertinoShortRangePage(
+        reachId: "31313421",
+        riverName: "River",
+        city: "City",
+        state: "State",
+      ),
       debugShowCheckedModeBanner: false,
     );
   }
